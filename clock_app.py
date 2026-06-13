@@ -49,7 +49,7 @@ THEMES = {
         "background": "#02070c",
     },
     "green": {
-        "label": "グリーン端末",
+        "label": "グリーンLED",
         "segment_on": "#44ff70",
         "segment_off": "#0c2c18",
         "background": "#030503",

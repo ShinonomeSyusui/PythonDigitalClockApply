@@ -24,6 +24,7 @@ class SevenSegmentClockView(tk.Canvas):
     GAP_UNIT = 0.12
     DIGIT_ASPECT = 1.82
     SECONDS_SMALL_SCALE = 0.5
+    DATE_DISPLAY_TOP_PADDING = 4
 
     def __init__(self, master, segment_on, segment_off, background, **kwargs):
         super().__init__(
@@ -131,9 +132,10 @@ class SevenSegmentClockView(tk.Canvas):
         y_padding = max(1, min(5, canvas_height * 0.014))
         date_area_height = max(18, min(52, canvas_height * 0.24)) if date_visible else 0
         date_gap = max(1, min(5, canvas_height * 0.018)) if date_visible else 0
+        top_extra_padding = self.DATE_DISPLAY_TOP_PADDING if date_visible else 0
 
         available_width = canvas_width - x_padding * 2
-        available_height = canvas_height - y_padding * 2 - date_area_height - date_gap
+        available_height = canvas_height - y_padding * 2 - date_area_height - date_gap - top_extra_padding
 
         if available_width <= 0 or available_height <= 0:
             return None
@@ -175,7 +177,7 @@ class SevenSegmentClockView(tk.Canvas):
             content_width = main_width
 
         start_x = (canvas_width - content_width) / 2
-        start_y = y_padding + (available_height - digit_height) / 2
+        start_y = y_padding + top_extra_padding + (available_height - digit_height) / 2
         seconds_y = start_y + digit_height - small_digit_height
         date_y = canvas_height - y_padding - date_area_height
 

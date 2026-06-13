@@ -1,0 +1,27 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local application settings
+settings.json
+
+# PyInstaller outputs
+build/
+dist/
+*.spec
+assets/app_icon.ico
+
+# Release packages
+release/
+*.zip
+
+# Editor and OS files
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

@@ -30,7 +30,7 @@ def get_resource_path(*parts):
 
 
 APP_NAME = "7セグメント デジタル時計"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 AUTO_DAY_THEME = "orange"
 AUTO_NIGHT_THEME = "blue"
 

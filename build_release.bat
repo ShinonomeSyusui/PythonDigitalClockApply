@@ -2,7 +2,7 @@
 setlocal
 
 set APP_NAME=SevenSegmentClock
-set VERSION=1.2.0
+set VERSION=1.2.1
 set RELEASE_ROOT=release
 set RELEASE_DIR=%RELEASE_ROOT%\%APP_NAME%-v%VERSION%
 set ZIP_PATH=%RELEASE_ROOT%\%APP_NAME%-v%VERSION%.zip

@@ -32,7 +32,7 @@ def get_resource_path(*parts):
 
 
 APP_NAME = "7セグメント デジタル時計"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 WINDOWS_APP_ID = "SevenSegmentClock.DesktopApp"
 
 def set_windows_app_user_model_id():
@@ -669,7 +669,7 @@ class ClockApp(tk.Tk):
             variable=opacity_value_var,
             showvalue=False,
             length=260,
-            command=lambda value: self._preview_opacity_percent(value, value_label),
+            command=lambda value: self._preview_opacity_percent(value, value_label, dialog),
         )
         scale.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
@@ -684,7 +684,7 @@ class ClockApp(tk.Tk):
         tk.Button(
             button_frame,
             text="100%に戻す",
-            command=lambda: self._reset_opacity_preview(opacity_value_var, value_label),
+            command=lambda: self._reset_opacity_preview(opacity_value_var, value_label, dialog),
         ).pack(side=tk.LEFT, padx=(0, 8))
         tk.Button(
             button_frame,
@@ -699,17 +699,32 @@ class ClockApp(tk.Tk):
 
         dialog.protocol("WM_DELETE_WINDOW", lambda: self._cancel_opacity_settings(dialog, original_opacity))
         self._center_child_window(dialog)
+        self._keep_dialog_in_front(dialog)
 
-    def _preview_opacity_percent(self, value, value_label):
+    def _preview_opacity_percent(self, value, value_label, dialog=None):
         percent = self._normalize_opacity_percent(int(float(value)))
         self.settings["opacity_percent"] = percent
         self.opacity_percent_var.set(percent)
         value_label.configure(text=f"{percent}%")
         self._apply_window_options()
+        self._keep_dialog_in_front(dialog)
 
-    def _reset_opacity_preview(self, opacity_value_var, value_label):
+    def _reset_opacity_preview(self, opacity_value_var, value_label, dialog=None):
         opacity_value_var.set(100)
-        self._preview_opacity_percent(100, value_label)
+        self._preview_opacity_percent(100, value_label, dialog)
+
+    def _keep_dialog_in_front(self, dialog):
+        if dialog is None:
+            return
+
+        try:
+            if self.settings["always_on_top"]:
+                dialog.attributes("-topmost", True)
+
+            dialog.lift(self)
+            dialog.focus_force()
+        except tk.TclError:
+            pass
 
     def _cancel_opacity_settings(self, dialog, original_opacity):
         self.settings["opacity_percent"] = original_opacity
@@ -723,6 +738,7 @@ class ClockApp(tk.Tk):
         self.settings["opacity_percent"] = self._normalize_opacity_percent(self.opacity_percent_var.get())
         self.opacity_percent_var.set(self.settings["opacity_percent"])
         self._apply_window_options()
+        self._keep_dialog_in_front(dialog)
         if self._save_settings_with_notice():
             dialog.destroy()
 

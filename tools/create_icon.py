@@ -58,3 +58,30 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+"""
+Generate Windows .ico file from assets/app_icon.png.
+
+Notes:
+- The source PNG should have transparent rounded corners.
+- If the PNG corners are opaque, the desktop icon may appear as a square.
+- This script preserves PNG transparency when generating the ICO file.
+- The generated ICO is used by PyInstaller during build.
+"""
+# IMPORTANT:
+# app_icon.png must already contain transparency.
+# This script does not automatically create rounded corners.
+
+"""
+assets/app_icon.png から Windows 用の .ico ファイルを生成します。
+
+注意事項：
+- 元の PNG 画像は、角が丸く透明である必要があります。
+- PNG 画像の角が不透明な場合、デスクトップ アイコンが四角形になることがあります。
+- このスクリプトは、ICO ファイルを生成する際に PNG 画像の透明度を保持します。
+- 生成された ICO ファイルは、PyInstaller のビルド時に使用されます。
+"""
+# 重要:
+# app_icon.png は既に透明度を持っている必要があります。
+# このスクリプトは角丸を自動的に作成しません。

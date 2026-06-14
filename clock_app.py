@@ -8,6 +8,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tkinter import colorchooser, filedialog, messagebox
+from version import APP_VERSION
 
 from clock_view import PIL_AVAILABLE, SevenSegmentClockView
 
@@ -32,7 +33,7 @@ def get_resource_path(*parts):
 
 
 APP_NAME = "7セグメント デジタル時計"
-APP_VERSION = "1.3.2"
+APP_VERSION = APP_VERSION
 WINDOWS_APP_ID = "SevenSegmentClock.DesktopApp"
 
 def set_windows_app_user_model_id():

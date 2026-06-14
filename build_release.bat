@@ -2,7 +2,7 @@
 setlocal
 
 set APP_NAME=SevenSegmentClock
-set VERSION=1.3.2
+for /f "usebackq delims=" %%i in (`python -c "from version import APP_VERSION; print(APP_VERSION)"`) do set VERSION=%%i
 set RELEASE_ROOT=release
 set RELEASE_DIR=%RELEASE_ROOT%\_%APP_NAME%-v%VERSION%-staging-%RANDOM%
 set ZIP_PATH=%RELEASE_ROOT%\%APP_NAME%-v%VERSION%.zip

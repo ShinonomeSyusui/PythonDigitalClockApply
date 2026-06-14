@@ -641,13 +641,10 @@ class ClockApp(tk.Tk):
     def _open_opacity_settings(self):
         original_opacity = self.settings["opacity_percent"]
         dialog = tk.Toplevel(self)
+        dialog.withdraw()
         dialog.title("透明度設定")
         dialog.resizable(False, False)
-        dialog.transient(self)
-        
-        if self.settings["always_on_top"]:
-            dialog.attributes("-topmost", True)
-        
+        dialog.transient(self)        
         dialog.grab_set()
 
         try:
@@ -700,10 +697,20 @@ class ClockApp(tk.Tk):
             text="適用して保存",
             command=lambda: self._save_opacity_settings(dialog),
         ).pack(side=tk.LEFT)
-
+        
         dialog.protocol("WM_DELETE_WINDOW", lambda: self._cancel_opacity_settings(dialog, original_opacity))
         self._center_child_window(dialog)
-        self._keep_dialog_in_front(dialog)
+
+        if self.settings["always_on_top"]:
+            dialog.attributes("-topmost", True)
+
+        dialog.deiconify()
+        dialog.lift()
+        dialog.focus_force()
+
+        # dialog.protocol("WM_DELETE_WINDOW", lambda: self._cancel_opacity_settings(dialog, original_opacity))
+        # self._center_child_window(dialog)
+        # self._keep_dialog_in_front(dialog)
 
     def _preview_opacity_percent(self, value, value_label, dialog=None):
         percent = self._normalize_opacity_percent(int(float(value)))
@@ -1498,6 +1505,17 @@ class ClockApp(tk.Tk):
         child.geometry(f"+{x}+{y}")
         child.lift()
         child.focus_set()
+        # child.update_idletasks()
+        # parent_x = self.winfo_rootx()
+        # parent_y = self.winfo_rooty()
+        # parent_width = self.winfo_width()
+        # parent_height = self.winfo_height()
+        # child_width = child.winfo_width()
+        # child_height = child.winfo_height()
+
+        # x = parent_x + (parent_width - child_width) // 2
+        # y = parent_y + (parent_height - child_height) // 2
+        # child.geometry(f"+{max(x, 0)}+{max(y, 0)}")
 
     def _on_close(self):
         if self._timer_after_id is not None:

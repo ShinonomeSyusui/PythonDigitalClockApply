@@ -2,13 +2,15 @@
 import json
 import os
 import tkinter as tk
+import tkinter.font as tkfont
 import sys
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tkinter import colorchooser, filedialog, messagebox
 
-from clock_view import SevenSegmentClockView
+from clock_view import PIL_AVAILABLE, SevenSegmentClockView
+
 from settings import (
     CUSTOM_THEME_SLOTS,
     DEFAULT_SETTINGS,
@@ -30,7 +32,35 @@ def get_resource_path(*parts):
 
 
 APP_NAME = "7セグメント デジタル時計"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.3.0"
+WINDOWS_APP_ID = "SevenSegmentClock.DesktopApp"
+
+def set_windows_app_user_model_id():
+    """WindowsのタスクバーでPython標準アイコンになりにくいよう、アプリIDを設定する。"""
+    if os.name != "nt":
+        return
+
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(WINDOWS_APP_ID)
+    except (AttributeError, OSError):
+        pass
+
+def set_windows_dpi_awareness():
+    """WindowsにDPI対応アプリとして扱わせ、メニュー文字のにじみを抑える。"""
+    if os.name != "nt":
+        return
+
+    try:
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except (AttributeError, OSError):
+        try:
+            import ctypes
+            ctypes.windll.user32.SetProcessDPIAware()
+        except (AttributeError, OSError):
+            pass
+
 AUTO_DAY_THEME = "orange"
 AUTO_NIGHT_THEME = "blue"
 
@@ -66,8 +96,14 @@ THEMES = {
 DATE_DISPLAY_LABELS = {
     "off": "非表示",
     "month_day": "月日",
+    "month_day_weekday": "月日＋曜日",
     "year_month_day": "年月日",
     "full": "年月日＋曜日",
+}
+
+DATE_SIZE_LABELS = {
+    "normal": "標準",
+    "small": "小さめ",
 }
 
 
@@ -76,6 +112,7 @@ LAYOUT_PRESETS = {
         "label": "標準",
         "show_seconds": True,
         "seconds_size": "normal",
+        "date_size": "small",
         "date_display": "off",
         "clock_only_mode": False,
         "always_on_top": False,
@@ -85,6 +122,7 @@ LAYOUT_PRESETS = {
         "label": "コンパクト",
         "show_seconds": False,
         "seconds_size": "normal",
+        "date_size": "small",
         "date_display": "off",
         "clock_only_mode": False,
         "always_on_top": False,
@@ -94,6 +132,7 @@ LAYOUT_PRESETS = {
         "label": "日付つき",
         "show_seconds": True,
         "seconds_size": "small",
+        "date_size": "small",
         "date_display": "year_month_day",
         "clock_only_mode": False,
         "always_on_top": False,
@@ -103,6 +142,7 @@ LAYOUT_PRESETS = {
         "label": "時計のみ表示向け",
         "show_seconds": True,
         "seconds_size": "small",
+        "date_size": "small",
         "date_display": "off",
         "clock_only_mode": True,
         "always_on_top": True,
@@ -115,9 +155,12 @@ class ClockApp(tk.Tk):
     """7セグメント風デジタル時計アプリ本体。"""
 
     def __init__(self):
+        set_windows_app_user_model_id()
+        set_windows_dpi_awareness()
         super().__init__()
 
         self.settings = load_settings()
+        self._configure_ui_fonts()
         self._jst = timezone(timedelta(hours=9))
         self._last_display = None
         self._timer_after_id = None
@@ -139,6 +182,7 @@ class ClockApp(tk.Tk):
         self.use_24_hour_var = tk.BooleanVar(value=self.settings["use_24_hour"])
         self.clock_only_mode_var = tk.BooleanVar(value=self.settings["clock_only_mode"])
         self.seconds_size_var = tk.StringVar(value=self.settings["seconds_size"])
+        self.date_size_var = tk.StringVar(value=self.settings["date_size"])
         self.theme_var = tk.StringVar(value=self.settings["theme"])
         self.opacity_percent_var = tk.IntVar(value=self.settings["opacity_percent"])
         self.date_display_var = tk.StringVar(value=self.settings["date_display"])
@@ -146,6 +190,8 @@ class ClockApp(tk.Tk):
         self.layout_preset_var = tk.StringVar(value=self.settings["layout_preset"])
         self.start_with_windows_var = tk.BooleanVar(value=self.settings["start_with_windows"])
         self.auto_day_night_theme_var = tk.BooleanVar(value=self.settings["auto_day_night_theme"])
+        self.high_quality_rendering_var = tk.BooleanVar(value=self.settings["high_quality_rendering"])
+        self.led_glow_enabled_var = tk.BooleanVar(value=self.settings["led_glow_enabled"])
 
         self.configure(bg=self.settings["background"])
         self._create_menu()
@@ -160,6 +206,21 @@ class ClockApp(tk.Tk):
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._update_clock()
+
+    def _configure_ui_fonts(self):
+        """Tk標準メニューの文字を、Windowsで読みやすいフォントへ寄せる。"""
+        try:
+            scaling = max(1.0, self.winfo_fpixels("1i") / 72)
+            self.tk.call("tk", "scaling", scaling)
+        except tk.TclError:
+            pass
+
+        try:
+            menu_font = tkfont.nametofont("TkMenuFont")
+            menu_font.configure(family="Yu Gothic UI", size=10)
+            self.option_add("*Menu.font", menu_font)
+        except tk.TclError:
+            pass
 
     def _create_menu(self):
         self.menu_bar = tk.Menu(self)
@@ -276,6 +337,15 @@ class ClockApp(tk.Tk):
                 command=self._on_display_setting_changed,
             )
         view_menu.add_cascade(label="日付表示", menu=date_display_menu)
+        date_size_menu = tk.Menu(view_menu, tearoff=False)
+        for value, label in DATE_SIZE_LABELS.items():
+            date_size_menu.add_radiobutton(
+                label=label,
+                variable=self.date_size_var,
+                value=value,
+                command=self._on_display_setting_changed,
+            )
+        view_menu.add_cascade(label="日付サイズ", menu=date_size_menu)
         view_menu.add_checkbutton(
             label="曜日色（土曜青・日曜赤）",
             variable=self.weekday_color_enabled_var,
@@ -290,6 +360,18 @@ class ClockApp(tk.Tk):
                 command=self._on_display_setting_changed,
             )
         view_menu.add_cascade(label="透明度", menu=opacity_menu)
+        view_menu.add_separator()
+        view_menu.add_checkbutton(
+            label="高画質描画",
+            variable=self.high_quality_rendering_var,
+            command=self._on_render_setting_changed,
+        )
+        view_menu.add_checkbutton(
+            label="LED発光効果",
+            variable=self.led_glow_enabled_var,
+            command=self._on_render_setting_changed,
+        )
+        view_menu.add_separator()
         view_menu.add_checkbutton(
             label="時計のみ表示",
             variable=self.clock_only_mode_var,
@@ -394,6 +476,15 @@ class ClockApp(tk.Tk):
                 command=self._on_display_setting_changed,
             )
         self.context_menu.add_cascade(label="日付表示", menu=date_display_menu)
+        date_size_menu = tk.Menu(self.context_menu, tearoff=False)
+        for value, label in DATE_SIZE_LABELS.items():
+            date_size_menu.add_radiobutton(
+                label=label,
+                variable=self.date_size_var,
+                value=value,
+                command=self._on_display_setting_changed,
+            )
+        self.context_menu.add_cascade(label="日付サイズ", menu=date_size_menu)
         self.context_menu.add_checkbutton(
             label="曜日色（土曜青・日曜赤）",
             variable=self.weekday_color_enabled_var,
@@ -408,6 +499,18 @@ class ClockApp(tk.Tk):
                 command=self._on_display_setting_changed,
             )
         self.context_menu.add_cascade(label="透明度", menu=opacity_menu)
+        self.context_menu.add_separator()
+        self.context_menu.add_checkbutton(
+            label="高画質描画",
+            variable=self.high_quality_rendering_var,
+            command=self._on_render_setting_changed,
+        )
+        self.context_menu.add_checkbutton(
+            label="LED発光効果",
+            variable=self.led_glow_enabled_var,
+            command=self._on_render_setting_changed,
+        )
+        self.context_menu.add_separator()
         self.context_menu.add_checkbutton(
             label="Windows起動時に自動起動",
             variable=self.start_with_windows_var,
@@ -435,6 +538,7 @@ class ClockApp(tk.Tk):
             segment_off=self.settings["segment_off"],
             background=self.settings["background"],
         )
+        self._apply_render_settings()
         self.clock_view.pack(fill=tk.BOTH, expand=True)
         self.clock_view.bind("<Button-3>", self._show_context_menu)
         self.clock_view.bind("<ButtonPress-1>", self._start_window_move)
@@ -556,6 +660,7 @@ class ClockApp(tk.Tk):
         self._sync_menu_variables()
         self._ensure_valid_colors()
         self._apply_visual_settings()
+        self._apply_render_settings()
         self._apply_window_options()
         self._apply_min_window_height()
         self._restore_window_size()
@@ -588,9 +693,12 @@ class ClockApp(tk.Tk):
             "use_24_hour",
             "clock_only_mode",
             "seconds_size",
+            "date_size",
             "opacity_percent",
             "date_display",
             "weekday_color_enabled",
+            "high_quality_rendering",
+            "led_glow_enabled",
             "layout_preset",
         ):
             self.settings[key] = DEFAULT_SETTINGS[key]
@@ -599,6 +707,7 @@ class ClockApp(tk.Tk):
         self._apply_window_options()
         self._apply_min_window_height()
         self._apply_clock_only_mode()
+        self._apply_render_settings()
         self._force_clock_redraw()
         self._save_settings_with_notice()
 
@@ -667,6 +776,7 @@ class ClockApp(tk.Tk):
         self._sync_menu_variables()
         self._ensure_valid_colors()
         self._apply_visual_settings()
+        self._apply_render_settings()
         self._apply_window_options()
         self._apply_min_window_height()
         self._restore_window_size()
@@ -767,17 +877,41 @@ class ClockApp(tk.Tk):
         self.settings["use_24_hour"] = self.use_24_hour_var.get()
         self.settings["clock_only_mode"] = self.clock_only_mode_var.get()
         self.settings["seconds_size"] = self._normalize_seconds_size(self.seconds_size_var.get())
+        self.settings["date_size"] = self._normalize_date_size(self.date_size_var.get())
         self.settings["opacity_percent"] = self._normalize_opacity_percent(self.opacity_percent_var.get())
         self.settings["date_display"] = self._normalize_date_display(self.date_display_var.get())
         self.settings["weekday_color_enabled"] = self.weekday_color_enabled_var.get()
         self.layout_preset_var.set("custom")
         self.seconds_size_var.set(self.settings["seconds_size"])
+        self.date_size_var.set(self.settings["date_size"])
         self.opacity_percent_var.set(self.settings["opacity_percent"])
         self.date_display_var.set(self.settings["date_display"])
 
         self._apply_window_options()
         self._apply_min_window_height()
         self._apply_clock_only_mode()
+        self._apply_render_settings()
+        self._force_clock_redraw()
+        self._save_settings_with_notice()
+
+    def _on_render_setting_changed(self):
+        if not PIL_AVAILABLE:
+            messagebox.showwarning(
+                "高画質描画",
+                "高画質描画にはPillowが必要です。\n\nVSCodeのPython環境を確認するか、次のコマンドで依存関係を入れてください。\npython -m pip install -r requirements.txt",
+                parent=self,
+            )
+            self.high_quality_rendering_var.set(False)
+            self.led_glow_enabled_var.set(False)
+            self.settings["high_quality_rendering"] = False
+            self.settings["led_glow_enabled"] = False
+            self._apply_render_settings()
+            self._save_settings_with_notice()
+            return
+
+        self.settings["high_quality_rendering"] = self.high_quality_rendering_var.get()
+        self.settings["led_glow_enabled"] = self.led_glow_enabled_var.get()
+        self._apply_render_settings()
         self._force_clock_redraw()
         self._save_settings_with_notice()
 
@@ -798,6 +932,7 @@ class ClockApp(tk.Tk):
         self._apply_window_options()
         self._apply_min_window_height()
         self._apply_clock_only_mode()
+        self._apply_render_settings()
         self._force_clock_redraw()
         self._save_settings_with_notice()
 
@@ -894,6 +1029,7 @@ class ClockApp(tk.Tk):
             time_text,
             period_text,
             self.settings["seconds_size"],
+            self.settings["date_size"],
             self.settings["date_display"],
             self.settings["weekday_color_enabled"],
             self._date_info_key(date_info),
@@ -907,6 +1043,7 @@ class ClockApp(tk.Tk):
                 date_info,
                 self.settings["date_display"],
                 self.settings["weekday_color_enabled"],
+                self.settings["date_size"],
             )
             self._last_display = display_key
 
@@ -917,17 +1054,20 @@ class ClockApp(tk.Tk):
         period_text = None
 
         if self.settings["use_24_hour"]:
-            display_hour = hour
+            # 24時間表示でも一桁時は先頭ゼロなしにし、07/08/09の見づらさを避ける。
+            hour_text = str(hour)
         else:
             period_text = "AM" if hour < 12 else "PM"
             display_hour = hour % 12
             if display_hour == 0:
                 display_hour = 12
+            # 12時間表示は先頭ゼロなし。10/11/12時だけ自然に2桁になる。
+            hour_text = str(display_hour)
 
         if self.settings["show_seconds"]:
-            return f"{display_hour}:{now.minute:02d}:{now.second:02d}", period_text
+            return f"{hour_text}:{now.minute:02d}:{now.second:02d}", period_text
 
-        return f"{display_hour}:{now.minute:02d}", period_text
+        return f"{hour_text}:{now.minute:02d}", period_text
 
     def _make_date_info(self, now):
         if self.settings["date_display"] == "off":
@@ -964,11 +1104,13 @@ class ClockApp(tk.Tk):
             date_info,
             self.settings["date_display"],
             self.settings["weekday_color_enabled"],
+            self.settings["date_size"],
         )
         self._last_display = (
             time_text,
             period_text,
             self.settings["seconds_size"],
+            self.settings["date_size"],
             self.settings["date_display"],
             self.settings["weekday_color_enabled"],
             self._date_info_key(date_info),
@@ -981,6 +1123,12 @@ class ClockApp(tk.Tk):
             self.settings["segment_on"],
             self.settings["segment_off"],
             self.settings["background"],
+        )
+
+    def _apply_render_settings(self):
+        self.clock_view.set_render_options(
+            self.settings["high_quality_rendering"],
+            self.settings["led_glow_enabled"],
         )
 
     def _apply_window_options(self):
@@ -1000,6 +1148,8 @@ class ClockApp(tk.Tk):
         if self.settings["date_display"] == "month_day":
             return 115
         if self.settings["date_display"] == "year_month_day":
+            return 125
+        if self.settings["date_display"] == "month_day_weekday":
             return 125
         if self.settings["date_display"] == "full":
             return 135
@@ -1052,13 +1202,32 @@ class ClockApp(tk.Tk):
 
     def _remember_window_size(self):
         # 閉じる直前のサイズだけ保存し、リサイズ中のJSON書き込みを避ける。
+        width, height, x, y = self._get_current_window_geometry()
+        self.settings["window_width"] = width
+        self.settings["window_height"] = height
+        self.settings["window_x"] = x
+        self.settings["window_y"] = y
+
+    def _get_current_window_geometry(self):
         self.update_idletasks()
-        self.settings["window_width"] = max(self._min_width, self.winfo_width())
-        self.settings["window_height"] = max(self._get_min_height_for_date_display(), self.winfo_height())
-        self.settings["window_x"] = self.winfo_x()
-        self.settings["window_y"] = self.winfo_y()
+        return (
+            max(self._min_width, self.winfo_width()),
+            max(self._get_min_height_for_date_display(), self.winfo_height()),
+            self.winfo_x(),
+            self.winfo_y(),
+        )
+
+    def _restore_window_geometry(self, geometry):
+        width, height, x, y = geometry
+        width = max(self._min_width, width)
+        height = max(self._get_min_height_for_date_display(), height)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.update_idletasks()
 
     def _apply_clock_only_mode(self):
+        # タイトルバー・メニューの切り替えでウィンドウ寸法が目減りしないよう、切替前の寸法を戻す。
+        geometry_before = self._get_current_window_geometry()
+
         if self.settings["clock_only_mode"]:
             self.config(menu="")
             self.overrideredirect(True)
@@ -1067,6 +1236,7 @@ class ClockApp(tk.Tk):
             self.config(menu=self.menu_bar)
 
         self.update_idletasks()
+        self._restore_window_geometry(geometry_before)
 
     def _set_clock_only_mode(self, enabled):
         self.settings["layout_preset"] = "custom"
@@ -1074,6 +1244,7 @@ class ClockApp(tk.Tk):
         self.clock_only_mode_var.set(enabled)
         self.settings["clock_only_mode"] = enabled
         self._apply_clock_only_mode()
+        self._apply_render_settings()
         self._force_clock_redraw()
         self._save_settings_with_notice()
 
@@ -1111,6 +1282,7 @@ class ClockApp(tk.Tk):
         self.use_24_hour_var.set(self.settings["use_24_hour"])
         self.clock_only_mode_var.set(self.settings["clock_only_mode"])
         self.seconds_size_var.set(self.settings["seconds_size"])
+        self.date_size_var.set(self.settings["date_size"])
         self.theme_var.set(self.settings["theme"])
         self.opacity_percent_var.set(self.settings["opacity_percent"])
         self.date_display_var.set(self.settings["date_display"])
@@ -1118,9 +1290,14 @@ class ClockApp(tk.Tk):
         self.layout_preset_var.set(self.settings["layout_preset"])
         self.start_with_windows_var.set(self.settings["start_with_windows"])
         self.auto_day_night_theme_var.set(self.settings["auto_day_night_theme"])
+        self.high_quality_rendering_var.set(self.settings["high_quality_rendering"])
+        self.led_glow_enabled_var.set(self.settings["led_glow_enabled"])
 
     def _normalize_seconds_size(self, seconds_size):
         return "small" if seconds_size == "small" else "normal"
+
+    def _normalize_date_size(self, date_size):
+        return "normal" if date_size == "normal" else "small"
 
     def _normalize_opacity_percent(self, opacity_percent):
         return opacity_percent if opacity_percent in (70, 80, 90, 100) else 100

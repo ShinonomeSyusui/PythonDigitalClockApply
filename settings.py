@@ -20,6 +20,7 @@ DEFAULT_SETTINGS = {
     "use_24_hour": True,
     "clock_only_mode": False,
     "seconds_size": "normal",
+    "date_size": "small",
     "theme": "custom",
     "custom_themes": {
         "custom1": {
@@ -41,6 +42,8 @@ DEFAULT_SETTINGS = {
     "opacity_percent": 100,
     "date_display": "off",
     "weekday_color_enabled": False,
+    "high_quality_rendering": False,
+    "led_glow_enabled": False,
     "layout_preset": "custom",
     "start_with_windows": False,
     "auto_day_night_theme": False,
@@ -52,9 +55,10 @@ DEFAULT_SETTINGS = {
 
 ALLOWED_VALUES = {
     "seconds_size": ("normal", "small"),
+    "date_size": ("normal", "small"),
     "theme": ("custom", "orange", "blue", "green", "red"),
     "opacity_percent": (70, 80, 90, 100),
-    "date_display": ("off", "month_day", "year_month_day", "full"),
+    "date_display": ("off", "month_day", "month_day_weekday", "year_month_day", "full"),
     "layout_preset": ("custom", "standard", "compact", "date", "clock_only"),
 }
 

@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-label="時計のみ表示のスクリーンショット">
-  <rect width="640" height="360" fill="#171717"/>
-  <rect x="76" y="110" width="488" height="140" rx="10" fill="#000000" stroke="#242424" stroke-width="2"/>
-  <text x="320" y="205" text-anchor="middle" font-family="Consolas, monospace" font-size="82" font-weight="700" fill="#44ff70">9:30</text>
-  <text x="320" y="282" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="18" fill="#9a9a9a">タイトルバーを隠した時計のみ表示</text>
-</svg>

@@ -63,6 +63,9 @@ def set_windows_dpi_awareness():
 
 AUTO_DAY_THEME = "orange"
 AUTO_NIGHT_THEME = "blue"
+OPACITY_MIN_PERCENT = 50
+OPACITY_MAX_PERCENT = 100
+OPACITY_STEP_PERCENT = 5
 
 
 THEMES = {
@@ -351,15 +354,7 @@ class ClockApp(tk.Tk):
             variable=self.weekday_color_enabled_var,
             command=self._on_display_setting_changed,
         )
-        opacity_menu = tk.Menu(view_menu, tearoff=False)
-        for percent in (100, 90, 80, 70):
-            opacity_menu.add_radiobutton(
-                label=f"{percent}%",
-                variable=self.opacity_percent_var,
-                value=percent,
-                command=self._on_display_setting_changed,
-            )
-        view_menu.add_cascade(label="透明度", menu=opacity_menu)
+        view_menu.add_command(label="透明度設定...", command=self._open_opacity_settings)
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="高画質描画",
@@ -490,15 +485,7 @@ class ClockApp(tk.Tk):
             variable=self.weekday_color_enabled_var,
             command=self._on_display_setting_changed,
         )
-        opacity_menu = tk.Menu(self.context_menu, tearoff=False)
-        for percent in (100, 90, 80, 70):
-            opacity_menu.add_radiobutton(
-                label=f"{percent}%",
-                variable=self.opacity_percent_var,
-                value=percent,
-                command=self._on_display_setting_changed,
-            )
-        self.context_menu.add_cascade(label="透明度", menu=opacity_menu)
+        self.context_menu.add_command(label="透明度設定...", command=self._open_opacity_settings)
         self.context_menu.add_separator()
         self.context_menu.add_checkbutton(
             label="高画質描画",
@@ -648,6 +635,94 @@ class ClockApp(tk.Tk):
         dialog.destroy()
 
     def _save_color_settings(self, dialog):
+        if self._save_settings_with_notice():
+            dialog.destroy()
+
+    def _open_opacity_settings(self):
+        original_opacity = self.settings["opacity_percent"]
+        dialog = tk.Toplevel(self)
+        dialog.title("透明度設定")
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        dialog.grab_set()
+
+        try:
+            dialog.attributes("-alpha", 1.0)
+        except tk.TclError:
+            pass
+
+        frame = tk.Frame(dialog, padx=18, pady=16)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        opacity_value_var = tk.IntVar(value=original_opacity)
+        value_label = tk.Label(frame, text=f"{original_opacity}%", width=5, anchor="e")
+
+        tk.Label(frame, text="透明度", anchor="w").grid(row=0, column=0, sticky="w", padx=(0, 12))
+        value_label.grid(row=0, column=1, sticky="e")
+
+        scale = tk.Scale(
+            frame,
+            from_=OPACITY_MIN_PERCENT,
+            to=OPACITY_MAX_PERCENT,
+            resolution=OPACITY_STEP_PERCENT,
+            orient=tk.HORIZONTAL,
+            variable=opacity_value_var,
+            showvalue=False,
+            length=260,
+            command=lambda value: self._preview_opacity_percent(value, value_label),
+        )
+        scale.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+
+        guide_frame = tk.Frame(frame)
+        guide_frame.grid(row=2, column=0, columnspan=2, sticky="ew")
+        tk.Label(guide_frame, text=f"{OPACITY_MIN_PERCENT}%").pack(side=tk.LEFT)
+        tk.Label(guide_frame, text=f"{OPACITY_MAX_PERCENT}%").pack(side=tk.RIGHT)
+
+        button_frame = tk.Frame(frame)
+        button_frame.grid(row=3, column=0, columnspan=2, sticky="e", pady=(14, 0))
+
+        tk.Button(
+            button_frame,
+            text="100%に戻す",
+            command=lambda: self._reset_opacity_preview(opacity_value_var, value_label),
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Button(
+            button_frame,
+            text="キャンセル",
+            command=lambda: self._cancel_opacity_settings(dialog, original_opacity),
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Button(
+            button_frame,
+            text="適用して保存",
+            command=lambda: self._save_opacity_settings(dialog),
+        ).pack(side=tk.LEFT)
+
+        dialog.protocol("WM_DELETE_WINDOW", lambda: self._cancel_opacity_settings(dialog, original_opacity))
+        self._center_child_window(dialog)
+
+    def _preview_opacity_percent(self, value, value_label):
+        percent = self._normalize_opacity_percent(int(float(value)))
+        self.settings["opacity_percent"] = percent
+        self.opacity_percent_var.set(percent)
+        value_label.configure(text=f"{percent}%")
+        self._apply_window_options()
+
+    def _reset_opacity_preview(self, opacity_value_var, value_label):
+        opacity_value_var.set(100)
+        self._preview_opacity_percent(100, value_label)
+
+    def _cancel_opacity_settings(self, dialog, original_opacity):
+        self.settings["opacity_percent"] = original_opacity
+        self.opacity_percent_var.set(original_opacity)
+        self._apply_window_options()
+        dialog.destroy()
+
+    def _save_opacity_settings(self, dialog):
+        self.settings["layout_preset"] = "custom"
+        self.layout_preset_var.set("custom")
+        self.settings["opacity_percent"] = self._normalize_opacity_percent(self.opacity_percent_var.get())
+        self.opacity_percent_var.set(self.settings["opacity_percent"])
+        self._apply_window_options()
         if self._save_settings_with_notice():
             dialog.destroy()
 
@@ -1300,7 +1375,11 @@ class ClockApp(tk.Tk):
         return "normal" if date_size == "normal" else "small"
 
     def _normalize_opacity_percent(self, opacity_percent):
-        return opacity_percent if opacity_percent in (70, 80, 90, 100) else 100
+        if type(opacity_percent) is not int:
+            return 100
+
+        clamped_opacity = min(OPACITY_MAX_PERCENT, max(OPACITY_MIN_PERCENT, opacity_percent))
+        return round(clamped_opacity / OPACITY_STEP_PERCENT) * OPACITY_STEP_PERCENT
 
     def _normalize_date_display(self, date_display):
         if date_display in DATE_DISPLAY_LABELS:

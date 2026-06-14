@@ -3,6 +3,7 @@ import json
 import sys
 from copy import deepcopy
 from pathlib import Path
+from datetime import datetime
 
 
 SETTINGS_FILE_NAME = "settings.json"
@@ -144,7 +145,12 @@ def load_settings():
     try:
         with path.open("r", encoding="utf-8") as file:
             data = json.load(file)
-    except (OSError, json.JSONDecodeError, TypeError):
+    except FileNotFoundError:
+        return deepcopy(DEFAULT_SETTINGS)
+    except (json.JSONDecodeError, TypeError):
+        backup_corrupted_settings(path)
+        return deepcopy(DEFAULT_SETTINGS)
+    except OSError:
         return deepcopy(DEFAULT_SETTINGS)
 
     return _normalize_settings(data)
@@ -158,3 +164,19 @@ def save_settings(settings):
 
     with path.open("w", encoding="utf-8") as file:
         json.dump(normalized_settings, file, ensure_ascii=False, indent=2)
+
+
+def backup_corrupted_settings(path):
+    """壊れた設定ファイルをタイムスタンプ付きで退避する。"""
+    if not path.exists():
+        return None
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = path.with_name(f"settings_corrupted_{timestamp}.json")
+
+    try:
+        path.replace(backup_path)
+    except OSError:
+        return None
+
+    return backup_path

@@ -20,6 +20,7 @@ DEFAULT_SETTINGS = {
     "use_24_hour": True,
     "clock_only_mode": False,
     "seconds_size": "normal",
+    "date_size": "small",
     "theme": "custom",
     "custom_themes": {
         "custom1": {
@@ -41,6 +42,8 @@ DEFAULT_SETTINGS = {
     "opacity_percent": 100,
     "date_display": "off",
     "weekday_color_enabled": False,
+    "high_quality_rendering": False,
+    "led_glow_enabled": False,
     "layout_preset": "custom",
     "start_with_windows": False,
     "auto_day_night_theme": False,
@@ -52,9 +55,9 @@ DEFAULT_SETTINGS = {
 
 ALLOWED_VALUES = {
     "seconds_size": ("normal", "small"),
+    "date_size": ("normal", "small"),
     "theme": ("custom", "orange", "blue", "green", "red"),
-    "opacity_percent": (70, 80, 90, 100),
-    "date_display": ("off", "month_day", "year_month_day", "full"),
+    "date_display": ("off", "month_day", "month_day_weekday", "year_month_day", "full"),
     "layout_preset": ("custom", "standard", "compact", "date", "clock_only"),
 }
 
@@ -81,7 +84,9 @@ def _normalize_settings(data):
         if isinstance(default_value, bool):
             settings[key] = value if isinstance(value, bool) else default_value
         elif isinstance(default_value, int):
-            if key in ALLOWED_VALUES:
+            if key == "opacity_percent":
+                settings[key] = _normalize_opacity_percent(value, default_value)
+            elif key in ALLOWED_VALUES:
                 settings[key] = value if type(value) is int and value in ALLOWED_VALUES[key] else default_value
             elif key in ("window_x", "window_y"):
                 settings[key] = value if type(value) is int else default_value
@@ -102,6 +107,15 @@ def _normalize_settings(data):
 def normalize_settings(data):
     """外部ファイルから読み込んだ設定も、安全な形に補正して返す。"""
     return _normalize_settings(data)
+
+
+def _normalize_opacity_percent(value, default_value):
+    """透明度は50〜100%を5%刻みで扱う。"""
+    if type(value) is not int:
+        return default_value
+
+    clamped_value = min(100, max(50, value))
+    return round(clamped_value / 5) * 5
 
 
 def _normalize_custom_themes(value):

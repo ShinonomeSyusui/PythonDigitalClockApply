@@ -32,7 +32,7 @@ def get_resource_path(*parts):
 
 
 APP_NAME = "7セグメント デジタル時計"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 WINDOWS_APP_ID = "SevenSegmentClock.DesktopApp"
 
 def set_windows_app_user_model_id():
@@ -641,9 +641,10 @@ class ClockApp(tk.Tk):
     def _open_opacity_settings(self):
         original_opacity = self.settings["opacity_percent"]
         dialog = tk.Toplevel(self)
+        dialog.withdraw()
         dialog.title("透明度設定")
         dialog.resizable(False, False)
-        dialog.transient(self)
+        dialog.transient(self)        
         dialog.grab_set()
 
         try:
@@ -669,7 +670,7 @@ class ClockApp(tk.Tk):
             variable=opacity_value_var,
             showvalue=False,
             length=260,
-            command=lambda value: self._preview_opacity_percent(value, value_label),
+            command=lambda value: self._preview_opacity_percent(value, value_label, dialog),
         )
         scale.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
@@ -684,7 +685,7 @@ class ClockApp(tk.Tk):
         tk.Button(
             button_frame,
             text="100%に戻す",
-            command=lambda: self._reset_opacity_preview(opacity_value_var, value_label),
+            command=lambda: self._reset_opacity_preview(opacity_value_var, value_label, dialog),
         ).pack(side=tk.LEFT, padx=(0, 8))
         tk.Button(
             button_frame,
@@ -696,20 +697,45 @@ class ClockApp(tk.Tk):
             text="適用して保存",
             command=lambda: self._save_opacity_settings(dialog),
         ).pack(side=tk.LEFT)
-
+        
         dialog.protocol("WM_DELETE_WINDOW", lambda: self._cancel_opacity_settings(dialog, original_opacity))
         self._center_child_window(dialog)
 
-    def _preview_opacity_percent(self, value, value_label):
+        if self.settings["always_on_top"]:
+            dialog.attributes("-topmost", True)
+
+        dialog.deiconify()
+        dialog.lift()
+        dialog.focus_force()
+
+        # dialog.protocol("WM_DELETE_WINDOW", lambda: self._cancel_opacity_settings(dialog, original_opacity))
+        # self._center_child_window(dialog)
+        # self._keep_dialog_in_front(dialog)
+
+    def _preview_opacity_percent(self, value, value_label, dialog=None):
         percent = self._normalize_opacity_percent(int(float(value)))
         self.settings["opacity_percent"] = percent
         self.opacity_percent_var.set(percent)
         value_label.configure(text=f"{percent}%")
         self._apply_window_options()
+        self._keep_dialog_in_front(dialog)
 
-    def _reset_opacity_preview(self, opacity_value_var, value_label):
+    def _reset_opacity_preview(self, opacity_value_var, value_label, dialog=None):
         opacity_value_var.set(100)
-        self._preview_opacity_percent(100, value_label)
+        self._preview_opacity_percent(100, value_label, dialog)
+
+    def _keep_dialog_in_front(self, dialog):
+        if dialog is None:
+            return
+
+        try:
+            if self.settings["always_on_top"]:
+                dialog.attributes("-topmost", True)
+
+            dialog.lift(self)
+            dialog.focus_force()
+        except tk.TclError:
+            pass
 
     def _cancel_opacity_settings(self, dialog, original_opacity):
         self.settings["opacity_percent"] = original_opacity
@@ -723,6 +749,7 @@ class ClockApp(tk.Tk):
         self.settings["opacity_percent"] = self._normalize_opacity_percent(self.opacity_percent_var.get())
         self.opacity_percent_var.set(self.settings["opacity_percent"])
         self._apply_window_options()
+        self._keep_dialog_in_front(dialog)
         if self._save_settings_with_notice():
             dialog.destroy()
 
@@ -1456,17 +1483,39 @@ class ClockApp(tk.Tk):
             pass
 
     def _center_child_window(self, child):
+        self.update_idletasks()
         child.update_idletasks()
+
         parent_x = self.winfo_rootx()
         parent_y = self.winfo_rooty()
         parent_width = self.winfo_width()
         parent_height = self.winfo_height()
+
         child_width = child.winfo_width()
         child_height = child.winfo_height()
 
-        x = parent_x + (parent_width - child_width) // 2
-        y = parent_y + (parent_height - child_height) // 2
-        child.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        # 親ウィンドウの中央から少し右下へずらす
+        x = parent_x + (parent_width - child_width) // 2 + 24
+        y = parent_y + (parent_height - child_height) // 2 + 24
+
+        # 画面左上より外へ出ないようにする
+        x = max(x, 0)
+        y = max(y, 0)
+
+        child.geometry(f"+{x}+{y}")
+        child.lift()
+        child.focus_set()
+        # child.update_idletasks()
+        # parent_x = self.winfo_rootx()
+        # parent_y = self.winfo_rooty()
+        # parent_width = self.winfo_width()
+        # parent_height = self.winfo_height()
+        # child_width = child.winfo_width()
+        # child_height = child.winfo_height()
+
+        # x = parent_x + (parent_width - child_width) // 2
+        # y = parent_y + (parent_height - child_height) // 2
+        # child.geometry(f"+{max(x, 0)}+{max(y, 0)}")
 
     def _on_close(self):
         if self._timer_after_id is not None:

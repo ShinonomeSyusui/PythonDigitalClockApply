@@ -644,6 +644,10 @@ class ClockApp(tk.Tk):
         dialog.title("透明度設定")
         dialog.resizable(False, False)
         dialog.transient(self)
+        
+        if self.settings["always_on_top"]:
+            dialog.attributes("-topmost", True)
+        
         dialog.grab_set()
 
         try:
@@ -1472,17 +1476,28 @@ class ClockApp(tk.Tk):
             pass
 
     def _center_child_window(self, child):
+        self.update_idletasks()
         child.update_idletasks()
+
         parent_x = self.winfo_rootx()
         parent_y = self.winfo_rooty()
         parent_width = self.winfo_width()
         parent_height = self.winfo_height()
+
         child_width = child.winfo_width()
         child_height = child.winfo_height()
 
-        x = parent_x + (parent_width - child_width) // 2
-        y = parent_y + (parent_height - child_height) // 2
-        child.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        # 親ウィンドウの中央から少し右下へずらす
+        x = parent_x + (parent_width - child_width) // 2 + 24
+        y = parent_y + (parent_height - child_height) // 2 + 24
+
+        # 画面左上より外へ出ないようにする
+        x = max(x, 0)
+        y = max(y, 0)
+
+        child.geometry(f"+{x}+{y}")
+        child.lift()
+        child.focus_set()
 
     def _on_close(self):
         if self._timer_after_id is not None:

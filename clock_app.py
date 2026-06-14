@@ -32,7 +32,7 @@ def get_resource_path(*parts):
 
 
 APP_NAME = "7セグメント デジタル時計"
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.3.2"
 WINDOWS_APP_ID = "SevenSegmentClock.DesktopApp"
 
 def set_windows_app_user_model_id():

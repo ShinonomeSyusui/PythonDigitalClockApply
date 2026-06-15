@@ -222,6 +222,7 @@ class ClockApp(tk.Tk):
             self._apply_startup_registration(True, show_error=False)
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        # self.bind("<Unmap>", self._on_window_unmap)
         self._setup_tray_icon()
         self._update_clock()
 
@@ -239,13 +240,39 @@ class ClockApp(tk.Tk):
 
     def _show_window(self):
         """ウィンドウを表示して前面へ戻す。"""
-        self.deiconify()
-        self.lift()
-        self.focus_force()
+        try:
+            self.deiconify()
+            self.lift()
+            self.focus_force()
+            self._apply_window_options()
+        except tk.TclError:
+            pass
 
     def _hide_window(self):
         """ウィンドウを非表示にする。"""
         self.withdraw()
+
+    # def _on_window_unmap(self, event):
+    #     """ウィンドウ最小化時にトレイへ格納する。"""
+    #     if event.widget is not self:
+    #         return
+
+    #     if self._is_quitting:
+    #         return
+
+    #     self.after(100, self._hide_to_tray_if_minimized)
+
+
+    # def _hide_to_tray_if_minimized(self):
+    #     """最小化状態であれば、タスクバーから隠してトレイへ格納する。"""
+    #     if self._is_quitting:
+    #         return
+
+    #     try:
+    #         if self.state() == "iconic":
+    #             self.withdraw()
+    #     except tk.TclError:
+    #         pass
 
     def _on_tray_toggle_clock_only(self, icon=None, item=None):
         """トレイメニューから時計のみ表示を切り替える。"""

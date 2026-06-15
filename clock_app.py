@@ -206,6 +206,7 @@ class ClockApp(tk.Tk):
         self.weekday_color_enabled_var = tk.BooleanVar(value=self.settings["weekday_color_enabled"])
         self.layout_preset_var = tk.StringVar(value=self.settings["layout_preset"])
         self.start_with_windows_var = tk.BooleanVar(value=self.settings["start_with_windows"])
+        self.close_to_tray_var = tk.BooleanVar(value=self.settings["close_to_tray"])
         self.auto_day_night_theme_var = tk.BooleanVar(value=self.settings["auto_day_night_theme"])
         self.high_quality_rendering_var = tk.BooleanVar(value=self.settings["high_quality_rendering"])
         self.led_glow_enabled_var = tk.BooleanVar(value=self.settings["led_glow_enabled"])
@@ -364,6 +365,11 @@ class ClockApp(tk.Tk):
             label="Windows起動時に自動起動",
             variable=self.start_with_windows_var,
             command=self._on_startup_setting_changed,
+        )
+        settings_menu.add_checkbutton(
+            label="閉じるボタンでタスクトレイに格納",
+            variable=self.close_to_tray_var,
+            command=self._on_close_to_tray_setting_changed,
         )
         settings_menu.add_command(label="画面中央へ戻す", command=self._center_window_now)
         settings_menu.add_separator()
@@ -1479,6 +1485,7 @@ class ClockApp(tk.Tk):
         self.auto_day_night_theme_var.set(self.settings["auto_day_night_theme"])
         self.high_quality_rendering_var.set(self.settings["high_quality_rendering"])
         self.led_glow_enabled_var.set(self.settings["led_glow_enabled"])
+        self.close_to_tray_var.set(self.settings["close_to_tray"])
 
     def _normalize_seconds_size(self, seconds_size):
         return "small" if seconds_size == "small" else "normal"
@@ -1649,7 +1656,14 @@ class ClockApp(tk.Tk):
     #     self._save_settings_with_notice()
     #     self.destroy()
 
+    def _on_close_to_tray_setting_changed(self):
+        self.settings["close_to_tray"] = self.close_to_tray_var.get()
+        self._save_settings_with_notice()
+
     def _on_close(self):
+        if self.settings["close_to_tray"] and TRAY_AVAILABLE and self._tray_icon is not None:
+            self._hide_window()
+            return
         self._quit_app()
 
 

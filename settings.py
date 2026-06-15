@@ -47,6 +47,7 @@ DEFAULT_SETTINGS = {
     "led_glow_enabled": False,
     "layout_preset": "custom",
     "start_with_windows": False,
+    "close_to_tray": False,
     "auto_day_night_theme": False,
     "window_width": 680,
     "window_height": 220,

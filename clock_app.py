@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 import os
+import threading
 import tkinter as tk
 import tkinter.font as tkfont
 import sys
@@ -11,6 +12,15 @@ from tkinter import colorchooser, filedialog, messagebox
 from version import APP_VERSION
 
 from clock_view import PIL_AVAILABLE, SevenSegmentClockView
+
+try:
+    import pystray
+    from PIL import Image
+    TRAY_AVAILABLE = True
+except ImportError:
+    pystray = None
+    Image = None
+    TRAY_AVAILABLE = False
 
 from settings import (
     CUSTOM_THEME_SLOTS,
@@ -171,6 +181,9 @@ class ClockApp(tk.Tk):
         self._drag_offset_x = 0
         self._drag_offset_y = 0
         self._last_auto_theme_key = None
+        self._tray_icon = None
+        self._tray_thread = None
+        self._is_quitting = False
         self._min_width = 340
         self._min_height = 105
 
@@ -209,7 +222,78 @@ class ClockApp(tk.Tk):
             self._apply_startup_registration(True, show_error=False)
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        # self.bind("<Unmap>", self._on_window_unmap)
+        self._setup_tray_icon()
         self._update_clock()
+
+    def _on_tray_quit(self, icon=None, item=None):
+        """トレイメニューからアプリを終了する。"""
+        self.after(0, self._quit_app)
+
+    def _on_tray_show(self, icon=None, item=None):
+        """トレイメニューからウィンドウを表示する。"""
+        self.after(0, self._show_window)
+
+    def _on_tray_hide(self, icon=None, item=None):
+        """トレイメニューからウィンドウを非表示にする。"""
+        self.after(0, self._hide_window)
+
+    def _show_window(self):
+        """ウィンドウを表示して前面へ戻す。"""
+        try:
+            self.deiconify()
+            self.lift()
+            self.focus_force()
+            self._apply_window_options()
+        except tk.TclError:
+            pass
+
+    def _hide_window(self):
+        """ウィンドウを非表示にする。"""
+        self.withdraw()
+
+    # def _on_window_unmap(self, event):
+    #     """ウィンドウ最小化時にトレイへ格納する。"""
+    #     if event.widget is not self:
+    #         return
+
+    #     if self._is_quitting:
+    #         return
+
+    #     self.after(100, self._hide_to_tray_if_minimized)
+
+
+    # def _hide_to_tray_if_minimized(self):
+    #     """最小化状態であれば、タスクバーから隠してトレイへ格納する。"""
+    #     if self._is_quitting:
+    #         return
+
+    #     try:
+    #         if self.state() == "iconic":
+    #             self.withdraw()
+    #     except tk.TclError:
+    #         pass
+
+    def _on_tray_toggle_clock_only(self, icon=None, item=None):
+        """トレイメニューから時計のみ表示を切り替える。"""
+        self.after(0, self._toggle_clock_only_from_tray)
+
+
+    def _toggle_clock_only_from_tray(self):
+        """時計のみ表示を切り替える。"""
+        self._set_clock_only_mode(not self.settings["clock_only_mode"])
+
+    def _stop_tray_icon(self):
+        """タスクトレイアイコンを停止する。"""
+        if self._tray_icon is None:
+            return
+        
+        try:
+            self._tray_icon.stop()
+        except Exception:
+            pass
+        self._tray_icon = None
+        self._tray_thread = None
 
     def _configure_ui_fonts(self):
         """Tk標準メニューの文字を、Windowsで読みやすいフォントへ寄せる。"""
@@ -1464,6 +1548,44 @@ class ClockApp(tk.Tk):
 
         return True
 
+    def _setup_tray_icon(self):
+        """タスクトレイアイコンを初期化して表示する。"""
+        if not TRAY_AVAILABLE:
+            return
+
+        if self._tray_icon is not None:
+            return
+
+        icon_path = get_resource_path("assets", "app_icon.png")
+        if not icon_path.exists():
+            return
+
+        try:
+            image = Image.open(icon_path)
+        except OSError:
+            return
+
+        menu = pystray.Menu(
+            pystray.MenuItem("表示", self._on_tray_show),
+            pystray.MenuItem("非表示", self._on_tray_hide),
+            pystray.MenuItem("時計のみ表示切替", self._on_tray_toggle_clock_only),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("終了", self._on_tray_quit)
+        )
+
+        self._tray_icon = pystray.Icon(
+            "SevenSegmentClock",
+            image,
+            APP_NAME,
+            menu
+        )
+
+        self._tray_thread = threading.Thread(
+            target=self._tray_icon.run,
+            daemon=True
+        )
+        self._tray_thread.start()
+
     def _set_window_icon(self):
         png_path = get_resource_path("assets", "app_icon.png")
         if png_path.exists():
@@ -1518,11 +1640,31 @@ class ClockApp(tk.Tk):
         # y = parent_y + (parent_height - child_height) // 2
         # child.geometry(f"+{max(x, 0)}+{max(y, 0)}")
 
+    # def _on_close(self):
+    #     if self._timer_after_id is not None:
+    #         self.after_cancel(self._timer_after_id)
+    #         self._timer_after_id = None
+
+    #     self._remember_window_size()
+    #     self._save_settings_with_notice()
+    #     self.destroy()
+
     def _on_close(self):
+        self._quit_app()
+
+
+    def _quit_app(self):
+        """アプリを完全に終了する。"""
+        if self._is_quitting:
+            return
+
+        self._is_quitting = True
+
         if self._timer_after_id is not None:
             self.after_cancel(self._timer_after_id)
             self._timer_after_id = None
 
         self._remember_window_size()
         self._save_settings_with_notice()
+        self._stop_tray_icon()
         self.destroy()

@@ -229,6 +229,33 @@ class ClockApp(tk.Tk):
         """トレイメニューからアプリを終了する。"""
         self.after(0, self._quit_app)
 
+    def _on_tray_show(self, icon=None, item=None):
+        """トレイメニューからウィンドウを表示する。"""
+        self.after(0, self._show_window)
+
+    def _on_tray_hide(self, icon=None, item=None):
+        """トレイメニューからウィンドウを非表示にする。"""
+        self.after(0, self._hide_window)
+
+    def _show_window(self):
+        """ウィンドウを表示して前面へ戻す。"""
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+
+    def _hide_window(self):
+        """ウィンドウを非表示にする。"""
+        self.withdraw()
+
+    def _on_tray_toggle_clock_only(self, icon=None, item=None):
+        """トレイメニューから時計のみ表示を切り替える。"""
+        self.after(0, self._toggle_clock_only_from_tray)
+
+
+    def _toggle_clock_only_from_tray(self):
+        """時計のみ表示を切り替える。"""
+        self._set_clock_only_mode(not self.settings["clock_only_mode"])
+
     def _stop_tray_icon(self):
         """タスクトレイアイコンを停止する。"""
         if self._tray_icon is None:
@@ -1512,6 +1539,10 @@ class ClockApp(tk.Tk):
             return
 
         menu = pystray.Menu(
+            pystray.MenuItem("表示", self._on_tray_show),
+            pystray.MenuItem("非表示", self._on_tray_hide),
+            pystray.MenuItem("時計のみ表示切替", self._on_tray_toggle_clock_only),
+            pystray.Menu.SEPARATOR,
             pystray.MenuItem("終了", self._on_tray_quit)
         )
 

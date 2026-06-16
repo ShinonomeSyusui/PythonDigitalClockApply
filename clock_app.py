@@ -16,6 +16,7 @@ from clock_view import PIL_AVAILABLE, SevenSegmentClockView
 try:
     import pystray
     from PIL import Image
+
     TRAY_AVAILABLE = True
 except ImportError:
     pystray = None
@@ -46,6 +47,7 @@ APP_NAME = "7セグメント デジタル時計"
 APP_VERSION = APP_VERSION
 WINDOWS_APP_ID = "SevenSegmentClock.DesktopApp"
 
+
 def set_windows_app_user_model_id():
     """WindowsのタスクバーでPython標準アイコンになりにくいよう、アプリIDを設定する。"""
     if os.name != "nt":
@@ -53,9 +55,11 @@ def set_windows_app_user_model_id():
 
     try:
         import ctypes
+
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(WINDOWS_APP_ID)
     except (AttributeError, OSError):
         pass
+
 
 def set_windows_dpi_awareness():
     """WindowsにDPI対応アプリとして扱わせ、メニュー文字のにじみを抑える。"""
@@ -64,19 +68,23 @@ def set_windows_dpi_awareness():
 
     try:
         import ctypes
+
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except (AttributeError, OSError):
         try:
             import ctypes
+
             ctypes.windll.user32.SetProcessDPIAware()
         except (AttributeError, OSError):
             pass
+
 
 AUTO_DAY_THEME = "orange"
 AUTO_NIGHT_THEME = "blue"
 OPACITY_MIN_PERCENT = 50
 OPACITY_MAX_PERCENT = 100
 OPACITY_STEP_PERCENT = 5
+TRANSPARENT_BACKGROUND_COLOR = "#010203"
 
 
 THEMES = {
@@ -184,6 +192,7 @@ class ClockApp(tk.Tk):
         self._last_auto_theme_key = None
         self._tray_icon = None
         self._tray_thread = None
+        self._click_layer = None
         self._is_quitting = False
         self._min_width = 340
         self._min_height = 105
@@ -203,14 +212,27 @@ class ClockApp(tk.Tk):
         self.date_size_var = tk.StringVar(value=self.settings["date_size"])
         self.theme_var = tk.StringVar(value=self.settings["theme"])
         self.opacity_percent_var = tk.IntVar(value=self.settings["opacity_percent"])
+        self.transparent_background_var = tk.BooleanVar(
+            value=self.settings["transparent_background"]
+        )
         self.date_display_var = tk.StringVar(value=self.settings["date_display"])
-        self.weekday_color_enabled_var = tk.BooleanVar(value=self.settings["weekday_color_enabled"])
+        self.weekday_color_enabled_var = tk.BooleanVar(
+            value=self.settings["weekday_color_enabled"]
+        )
         self.layout_preset_var = tk.StringVar(value=self.settings["layout_preset"])
-        self.start_with_windows_var = tk.BooleanVar(value=self.settings["start_with_windows"])
+        self.start_with_windows_var = tk.BooleanVar(
+            value=self.settings["start_with_windows"]
+        )
         self.close_to_tray_var = tk.BooleanVar(value=self.settings["close_to_tray"])
-        self.auto_day_night_theme_var = tk.BooleanVar(value=self.settings["auto_day_night_theme"])
-        self.high_quality_rendering_var = tk.BooleanVar(value=self.settings["high_quality_rendering"])
-        self.led_glow_enabled_var = tk.BooleanVar(value=self.settings["led_glow_enabled"])
+        self.auto_day_night_theme_var = tk.BooleanVar(
+            value=self.settings["auto_day_night_theme"]
+        )
+        self.high_quality_rendering_var = tk.BooleanVar(
+            value=self.settings["high_quality_rendering"]
+        )
+        self.led_glow_enabled_var = tk.BooleanVar(
+            value=self.settings["led_glow_enabled"]
+        )
 
         self.configure(bg=self.settings["background"])
         self._create_menu()
@@ -247,39 +269,20 @@ class ClockApp(tk.Tk):
             self.lift()
             self.focus_force()
             self._apply_window_options()
+            self._sync_click_layer_geometry()
         except tk.TclError:
             pass
 
     def _hide_window(self):
         """ウィンドウを非表示にする。"""
+        if self._click_layer is not None:
+            self._click_layer.withdraw()
         self.withdraw()
-
-    # def _on_window_unmap(self, event):
-    #     """ウィンドウ最小化時にトレイへ格納する。"""
-    #     if event.widget is not self:
-    #         return
-
-    #     if self._is_quitting:
-    #         return
-
-    #     self.after(100, self._hide_to_tray_if_minimized)
-
-
-    # def _hide_to_tray_if_minimized(self):
-    #     """最小化状態であれば、タスクバーから隠してトレイへ格納する。"""
-    #     if self._is_quitting:
-    #         return
-
-    #     try:
-    #         if self.state() == "iconic":
-    #             self.withdraw()
-    #     except tk.TclError:
-    #         pass
+        self._sync_click_layer_geometry()
 
     def _on_tray_toggle_clock_only(self, icon=None, item=None):
         """トレイメニューから時計のみ表示を切り替える。"""
         self.after(0, self._toggle_clock_only_from_tray)
-
 
     def _toggle_clock_only_from_tray(self):
         """時計のみ表示を切り替える。"""
@@ -289,7 +292,7 @@ class ClockApp(tk.Tk):
         """タスクトレイアイコンを停止する。"""
         if self._tray_icon is None:
             return
-        
+
         try:
             self._tray_icon.stop()
         except Exception:
@@ -351,14 +354,24 @@ class ClockApp(tk.Tk):
                 custom_theme_menu.add_separator()
         settings_menu.add_cascade(label="自作テーマ", menu=custom_theme_menu)
         settings_menu.add_separator()
-        settings_menu.add_command(label="設定をエクスポート...", command=self._export_settings)
-        settings_menu.add_command(label="設定をインポート...", command=self._import_settings)
-        settings_menu.add_command(label="設定フォルダを開く", command=self._open_settings_folder)
+        settings_menu.add_command(
+            label="設定をエクスポート...", command=self._export_settings
+        )
+        settings_menu.add_command(
+            label="設定をインポート...", command=self._import_settings
+        )
+        settings_menu.add_command(
+            label="設定フォルダを開く", command=self._open_settings_folder
+        )
         settings_menu.add_separator()
         reset_menu = tk.Menu(settings_menu, tearoff=False)
         reset_menu.add_command(label="色だけ初期化", command=self._reset_color_settings)
-        reset_menu.add_command(label="表示設定だけ初期化", command=self._reset_display_settings)
-        reset_menu.add_command(label="ウィンドウ位置だけ初期化", command=self._reset_window_placement)
+        reset_menu.add_command(
+            label="表示設定だけ初期化", command=self._reset_display_settings
+        )
+        reset_menu.add_command(
+            label="ウィンドウ位置だけ初期化", command=self._reset_window_placement
+        )
         reset_menu.add_separator()
         reset_menu.add_command(label="すべて初期化", command=self._reset_all_settings)
         settings_menu.add_cascade(label="初期化", menu=reset_menu)
@@ -372,7 +385,9 @@ class ClockApp(tk.Tk):
             variable=self.close_to_tray_var,
             command=self._on_close_to_tray_setting_changed,
         )
-        settings_menu.add_command(label="画面中央へ戻す", command=self._center_window_now)
+        settings_menu.add_command(
+            label="画面中央へ戻す", command=self._center_window_now
+        )
         settings_menu.add_separator()
         settings_menu.add_command(label="終了", command=self._on_close)
         self.menu_bar.add_cascade(label="設定", menu=settings_menu)
@@ -446,7 +461,15 @@ class ClockApp(tk.Tk):
             variable=self.weekday_color_enabled_var,
             command=self._on_display_setting_changed,
         )
-        view_menu.add_command(label="透明度設定...", command=self._open_opacity_settings)
+        view_menu.add_command(
+            label="透明度設定...", command=self._open_opacity_settings
+        )
+
+        view_menu.add_checkbutton(
+            label="背景を透明にする",
+            variable=self.transparent_background_var,
+            command=self._on_display_setting_changed,
+        )
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="高画質描画",
@@ -467,15 +490,21 @@ class ClockApp(tk.Tk):
         self.menu_bar.add_cascade(label="表示", menu=view_menu)
 
         help_menu = tk.Menu(self.menu_bar, tearoff=False)
-        help_menu.add_command(label="このアプリについて", command=self._show_about_dialog)
+        help_menu.add_command(
+            label="このアプリについて", command=self._show_about_dialog
+        )
         self.menu_bar.add_cascade(label="ヘルプ", menu=help_menu)
 
         self.config(menu=self.menu_bar)
 
     def _create_context_menu(self):
         self.context_menu = tk.Menu(self, tearoff=False)
-        self.context_menu.add_command(label="通常表示に戻す", command=lambda: self._set_clock_only_mode(False))
-        self.context_menu.add_command(label="色設定...", command=self._open_color_settings)
+        self.context_menu.add_command(
+            label="通常表示に戻す", command=lambda: self._set_clock_only_mode(False)
+        )
+        self.context_menu.add_command(
+            label="色設定...", command=self._open_color_settings
+        )
         theme_menu = tk.Menu(self.context_menu, tearoff=False)
         theme_menu.add_radiobutton(
             label="カスタム（現在の色）",
@@ -524,7 +553,9 @@ class ClockApp(tk.Tk):
                 value=preset_key,
                 command=self._on_layout_preset_changed,
             )
-        self.context_menu.add_cascade(label="レイアウトプリセット", menu=layout_preset_menu)
+        self.context_menu.add_cascade(
+            label="レイアウトプリセット", menu=layout_preset_menu
+        )
         self.context_menu.add_checkbutton(
             label="最前面表示",
             variable=self.always_on_top_var,
@@ -577,7 +608,14 @@ class ClockApp(tk.Tk):
             variable=self.weekday_color_enabled_var,
             command=self._on_display_setting_changed,
         )
-        self.context_menu.add_command(label="透明度設定...", command=self._open_opacity_settings)
+        self.context_menu.add_command(
+            label="透明度設定...", command=self._open_opacity_settings
+        )
+        self.context_menu.add_checkbutton(
+            label="背景を透明にする",
+            variable=self.transparent_background_var,
+            command=self._on_display_setting_changed,
+        )
         self.context_menu.add_separator()
         self.context_menu.add_checkbutton(
             label="高画質描画",
@@ -595,15 +633,29 @@ class ClockApp(tk.Tk):
             variable=self.start_with_windows_var,
             command=self._on_startup_setting_changed,
         )
-        self.context_menu.add_command(label="設定をエクスポート...", command=self._export_settings)
-        self.context_menu.add_command(label="設定をインポート...", command=self._import_settings)
-        self.context_menu.add_command(label="設定フォルダを開く", command=self._open_settings_folder)
-        self.context_menu.add_command(label="このアプリについて", command=self._show_about_dialog)
-        self.context_menu.add_command(label="画面中央へ戻す", command=self._center_window_now)
+        self.context_menu.add_command(
+            label="設定をエクスポート...", command=self._export_settings
+        )
+        self.context_menu.add_command(
+            label="設定をインポート...", command=self._import_settings
+        )
+        self.context_menu.add_command(
+            label="設定フォルダを開く", command=self._open_settings_folder
+        )
+        self.context_menu.add_command(
+            label="このアプリについて", command=self._show_about_dialog
+        )
+        self.context_menu.add_command(
+            label="画面中央へ戻す", command=self._center_window_now
+        )
         reset_menu = tk.Menu(self.context_menu, tearoff=False)
         reset_menu.add_command(label="色だけ初期化", command=self._reset_color_settings)
-        reset_menu.add_command(label="表示設定だけ初期化", command=self._reset_display_settings)
-        reset_menu.add_command(label="ウィンドウ位置だけ初期化", command=self._reset_window_placement)
+        reset_menu.add_command(
+            label="表示設定だけ初期化", command=self._reset_display_settings
+        )
+        reset_menu.add_command(
+            label="ウィンドウ位置だけ初期化", command=self._reset_window_placement
+        )
         reset_menu.add_separator()
         reset_menu.add_command(label="すべて初期化", command=self._reset_all_settings)
         self.context_menu.add_cascade(label="初期化", menu=reset_menu)
@@ -614,8 +666,8 @@ class ClockApp(tk.Tk):
         self.clock_view = SevenSegmentClockView(
             self,
             segment_on=self.settings["segment_on"],
-            segment_off=self.settings["segment_off"],
-            background=self.settings["background"],
+            segment_off=self._get_effective_segment_off_color(),
+            background=self._get_effective_background_color(),
         )
         self._apply_render_settings()
         self.clock_view.pack(fill=tk.BOTH, expand=True)
@@ -670,7 +722,9 @@ class ClockApp(tk.Tk):
             button.grid(row=row_index, column=2, sticky="ew", pady=6)
 
         button_frame = tk.Frame(frame)
-        button_frame.grid(row=len(color_rows), column=0, columnspan=3, sticky="e", pady=(14, 0))
+        button_frame.grid(
+            row=len(color_rows), column=0, columnspan=3, sticky="e", pady=(14, 0)
+        )
 
         tk.Button(
             button_frame,
@@ -688,7 +742,10 @@ class ClockApp(tk.Tk):
             command=lambda: self._save_color_settings(dialog),
         ).pack(side=tk.LEFT)
 
-        dialog.protocol("WM_DELETE_WINDOW", lambda: self._cancel_color_settings(dialog, original_settings))
+        dialog.protocol(
+            "WM_DELETE_WINDOW",
+            lambda: self._cancel_color_settings(dialog, original_settings),
+        )
         self._center_child_window(dialog)
 
     def _choose_color(self, color_key, swatches):
@@ -715,7 +772,9 @@ class ClockApp(tk.Tk):
         self.theme_var.set("custom")
         for key in ("segment_on", "segment_off", "background"):
             self.settings[key] = DEFAULT_SETTINGS[key]
-            swatches[key].configure(bg=DEFAULT_SETTINGS[key], text=DEFAULT_SETTINGS[key])
+            swatches[key].configure(
+                bg=DEFAULT_SETTINGS[key], text=DEFAULT_SETTINGS[key]
+            )
 
         self._remember_custom_colors()
         self._apply_visual_settings()
@@ -736,7 +795,7 @@ class ClockApp(tk.Tk):
         dialog.withdraw()
         dialog.title("透明度設定")
         dialog.resizable(False, False)
-        dialog.transient(self)        
+        dialog.transient(self)
         dialog.grab_set()
 
         try:
@@ -750,7 +809,9 @@ class ClockApp(tk.Tk):
         opacity_value_var = tk.IntVar(value=original_opacity)
         value_label = tk.Label(frame, text=f"{original_opacity}%", width=5, anchor="e")
 
-        tk.Label(frame, text="透明度", anchor="w").grid(row=0, column=0, sticky="w", padx=(0, 12))
+        tk.Label(frame, text="透明度", anchor="w").grid(
+            row=0, column=0, sticky="w", padx=(0, 12)
+        )
         value_label.grid(row=0, column=1, sticky="e")
 
         scale = tk.Scale(
@@ -762,7 +823,9 @@ class ClockApp(tk.Tk):
             variable=opacity_value_var,
             showvalue=False,
             length=260,
-            command=lambda value: self._preview_opacity_percent(value, value_label, dialog),
+            command=lambda value: self._preview_opacity_percent(
+                value, value_label, dialog
+            ),
         )
         scale.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
@@ -777,7 +840,9 @@ class ClockApp(tk.Tk):
         tk.Button(
             button_frame,
             text="100%に戻す",
-            command=lambda: self._reset_opacity_preview(opacity_value_var, value_label, dialog),
+            command=lambda: self._reset_opacity_preview(
+                opacity_value_var, value_label, dialog
+            ),
         ).pack(side=tk.LEFT, padx=(0, 8))
         tk.Button(
             button_frame,
@@ -789,8 +854,11 @@ class ClockApp(tk.Tk):
             text="適用して保存",
             command=lambda: self._save_opacity_settings(dialog),
         ).pack(side=tk.LEFT)
-        
-        dialog.protocol("WM_DELETE_WINDOW", lambda: self._cancel_opacity_settings(dialog, original_opacity))
+
+        dialog.protocol(
+            "WM_DELETE_WINDOW",
+            lambda: self._cancel_opacity_settings(dialog, original_opacity),
+        )
         self._center_child_window(dialog)
 
         if self.settings["always_on_top"]:
@@ -799,10 +867,6 @@ class ClockApp(tk.Tk):
         dialog.deiconify()
         dialog.lift()
         dialog.focus_force()
-
-        # dialog.protocol("WM_DELETE_WINDOW", lambda: self._cancel_opacity_settings(dialog, original_opacity))
-        # self._center_child_window(dialog)
-        # self._keep_dialog_in_front(dialog)
 
     def _preview_opacity_percent(self, value, value_label, dialog=None):
         percent = self._normalize_opacity_percent(int(float(value)))
@@ -838,7 +902,9 @@ class ClockApp(tk.Tk):
     def _save_opacity_settings(self, dialog):
         self.settings["layout_preset"] = "custom"
         self.layout_preset_var.set("custom")
-        self.settings["opacity_percent"] = self._normalize_opacity_percent(self.opacity_percent_var.get())
+        self.settings["opacity_percent"] = self._normalize_opacity_percent(
+            self.opacity_percent_var.get()
+        )
         self.opacity_percent_var.set(self.settings["opacity_percent"])
         self._apply_window_options()
         self._keep_dialog_in_front(dialog)
@@ -846,7 +912,9 @@ class ClockApp(tk.Tk):
             dialog.destroy()
 
     def _reset_all_settings(self):
-        if not messagebox.askyesno("確認", "すべての設定を初期値に戻しますか？", parent=self):
+        if not messagebox.askyesno(
+            "確認", "すべての設定を初期値に戻しますか？", parent=self
+        ):
             return
 
         self._apply_startup_registration(False, show_error=False)
@@ -864,7 +932,9 @@ class ClockApp(tk.Tk):
         self._save_settings_with_notice()
 
     def _reset_color_settings(self):
-        if not messagebox.askyesno("確認", "現在の色設定を初期値に戻しますか？", parent=self):
+        if not messagebox.askyesno(
+            "確認", "現在の色設定を初期値に戻しますか？", parent=self
+        ):
             return
 
         self.settings["theme"] = "custom"
@@ -878,7 +948,9 @@ class ClockApp(tk.Tk):
         self._save_settings_with_notice()
 
     def _reset_display_settings(self):
-        if not messagebox.askyesno("確認", "表示設定を初期値に戻しますか？", parent=self):
+        if not messagebox.askyesno(
+            "確認", "表示設定を初期値に戻しますか？", parent=self
+        ):
             return
 
         for key in (
@@ -894,6 +966,7 @@ class ClockApp(tk.Tk):
             "high_quality_rendering",
             "led_glow_enabled",
             "layout_preset",
+            "transparent_background",
         ):
             self.settings[key] = DEFAULT_SETTINGS[key]
 
@@ -902,11 +975,14 @@ class ClockApp(tk.Tk):
         self._apply_min_window_height()
         self._apply_clock_only_mode()
         self._apply_render_settings()
+        self._apply_transparent_background()
         self._force_clock_redraw()
         self._save_settings_with_notice()
 
     def _reset_window_placement(self):
-        if not messagebox.askyesno("確認", "ウィンドウのサイズと位置を初期値に戻しますか？", parent=self):
+        if not messagebox.askyesno(
+            "確認", "ウィンドウのサイズと位置を初期値に戻しますか？", parent=self
+        ):
             return
 
         self.settings["window_width"] = DEFAULT_SETTINGS["window_width"]
@@ -963,7 +1039,9 @@ class ClockApp(tk.Tk):
             )
             return
 
-        if not messagebox.askyesno("確認", "現在の設定を読み込んだ設定で置き換えますか？", parent=self):
+        if not messagebox.askyesno(
+            "確認", "現在の設定を読み込んだ設定で置き換えますか？", parent=self
+        ):
             return
 
         self.settings = normalize_settings(loaded_data)
@@ -975,7 +1053,9 @@ class ClockApp(tk.Tk):
         self._apply_min_window_height()
         self._restore_window_size()
         self._apply_clock_only_mode()
-        self._apply_startup_registration(self.settings["start_with_windows"], show_error=False)
+        self._apply_startup_registration(
+            self.settings["start_with_windows"], show_error=False
+        )
         self._apply_auto_day_night_theme(force=True)
         self._force_clock_redraw()
 
@@ -1070,17 +1150,25 @@ class ClockApp(tk.Tk):
         self.settings["show_seconds"] = self.show_seconds_var.get()
         self.settings["use_24_hour"] = self.use_24_hour_var.get()
         self.settings["clock_only_mode"] = self.clock_only_mode_var.get()
-        self.settings["seconds_size"] = self._normalize_seconds_size(self.seconds_size_var.get())
+        self.settings["seconds_size"] = self._normalize_seconds_size(
+            self.seconds_size_var.get()
+        )
         self.settings["date_size"] = self._normalize_date_size(self.date_size_var.get())
-        self.settings["opacity_percent"] = self._normalize_opacity_percent(self.opacity_percent_var.get())
-        self.settings["date_display"] = self._normalize_date_display(self.date_display_var.get())
+        self.settings["opacity_percent"] = self._normalize_opacity_percent(
+            self.opacity_percent_var.get()
+        )
+        self.settings["date_display"] = self._normalize_date_display(
+            self.date_display_var.get()
+        )
         self.settings["weekday_color_enabled"] = self.weekday_color_enabled_var.get()
+        self.settings["transparent_background"] = self.transparent_background_var.get()
         self.layout_preset_var.set("custom")
         self.seconds_size_var.set(self.settings["seconds_size"])
         self.date_size_var.set(self.settings["date_size"])
         self.opacity_percent_var.set(self.settings["opacity_percent"])
         self.date_display_var.set(self.settings["date_display"])
 
+        self._apply_visual_settings()
         self._apply_window_options()
         self._apply_min_window_height()
         self._apply_clock_only_mode()
@@ -1142,7 +1230,11 @@ class ClockApp(tk.Tk):
         self._remember_custom_colors()
         slot_number = CUSTOM_THEME_SLOTS.index(slot_key) + 1
         if self._save_settings_with_notice():
-            messagebox.showinfo("自作テーマ", f"自作テーマ{slot_number}に現在の色を保存しました。", parent=self)
+            messagebox.showinfo(
+                "自作テーマ",
+                f"自作テーマ{slot_number}に現在の色を保存しました。",
+                parent=self,
+            )
 
     def _load_custom_theme(self, slot_key):
         if slot_key not in CUSTOM_THEME_SLOTS:
@@ -1177,7 +1269,9 @@ class ClockApp(tk.Tk):
             startup_script_path = self._get_startup_script_path()
             if enabled:
                 startup_script_path.parent.mkdir(parents=True, exist_ok=True)
-                startup_script_path.write_text(self._make_startup_script_text(), encoding="utf-8")
+                startup_script_path.write_text(
+                    self._make_startup_script_text(), encoding="utf-8"
+                )
             elif startup_script_path.exists():
                 startup_script_path.unlink()
         except OSError as error:
@@ -1270,11 +1364,6 @@ class ClockApp(tk.Tk):
 
         colon = ":" if self._colon_visible else " "
         return f"{hour_text}{colon}{now.minute:02d}", period_text
-        
-        # if self.settings["show_seconds"]:
-        #     return f"{hour_text}:{now.minute:02d}:{now.second:02d}", period_text
-
-        # return f"{hour_text}:{now.minute:02d}", period_text
 
     def _make_date_info(self, now):
         if self.settings["date_display"] == "off":
@@ -1323,13 +1412,38 @@ class ClockApp(tk.Tk):
             self._date_info_key(date_info),
         )
 
+    def _is_transparent_background_supported(self):
+        return os.name == "nt"
+    
+    def _get_effective_segment_off_color(self):
+        if (
+            self.settings.get("transparent_background", False)
+            and self._is_transparent_background_supported()
+        ):
+            return TRANSPARENT_BACKGROUND_COLOR
+
+        return self.settings["segment_off"]
+
+    def _get_effective_background_color(self):
+        if (
+            self.settings.get("transparent_background", False)
+            and self._is_transparent_background_supported()
+        ):
+            return TRANSPARENT_BACKGROUND_COLOR
+
+        return self.settings["background"]
+
     def _apply_visual_settings(self):
         self._ensure_valid_colors()
-        self.configure(bg=self.settings["background"])
+
+        background = self._get_effective_background_color()
+        segment_off = self._get_effective_segment_off_color()
+
+        self.configure(bg=background)
         self.clock_view.set_colors(
             self.settings["segment_on"],
-            self.settings["segment_off"],
-            self.settings["background"],
+            segment_off,
+            background,
         )
 
     def _apply_render_settings(self):
@@ -1341,6 +1455,86 @@ class ClockApp(tk.Tk):
     def _apply_window_options(self):
         self.attributes("-topmost", self.settings["always_on_top"])
         self.attributes("-alpha", self.settings["opacity_percent"] / 100)
+        self._apply_transparent_background()
+
+    def _apply_transparent_background(self):
+        if not self._is_transparent_background_supported():
+            self._destroy_click_layer()
+            return
+
+        try:
+            if self.settings.get("transparent_background", False):
+                self.attributes("-transparentcolor", TRANSPARENT_BACKGROUND_COLOR)
+            else:
+                self.attributes("-transparentcolor", "")
+        except tk.TclError:
+            pass
+
+        if self.settings.get("transparent_background", False) and self.settings.get("clock_only_mode", False):
+            self._ensure_click_layer()
+            self._sync_click_layer_geometry()
+        else:
+            self._destroy_click_layer()
+
+    def _ensure_click_layer(self):
+        if self._click_layer is not None:
+            return
+
+        layer = tk.Toplevel(self)
+        layer.withdraw()
+        layer.overrideredirect(True)
+        layer.transient(self)
+
+        try:
+            layer.attributes("-alpha", 0.01)
+        except tk.TclError:
+            pass
+
+        try:
+            layer.attributes("-topmost", self.settings["always_on_top"])
+        except tk.TclError:
+            pass
+
+        layer.configure(bg="black")
+
+        layer.bind("<Button-3>", self._show_context_menu)
+        layer.bind("<ButtonPress-1>", self._start_window_move)
+        layer.bind("<B1-Motion>", self._move_window)
+
+        self._click_layer = layer
+        self._sync_click_layer_geometry()
+
+    def _sync_click_layer_geometry(self):
+        if self._click_layer is None:
+            return
+
+        try:
+            self.update_idletasks()
+            width = max(1, self.winfo_width())
+            height = max(1, self.winfo_height())
+            x = self.winfo_x()
+            y = self.winfo_y()
+
+            self._click_layer.geometry(f"{width}x{height}+{x}+{y}")
+
+            if self.settings["transparent_background"] and self.settings["clock_only_mode"]:
+                self._click_layer.deiconify()
+                self._click_layer.lift()
+            else:
+                self._click_layer.withdraw()
+        except tk.TclError:
+            pass
+
+    def _destroy_click_layer(self):
+        if self._click_layer is None:
+            return
+
+        try:
+            self._click_layer.destroy()
+        except tk.TclError:
+            pass
+
+        self._click_layer = None
 
     def _apply_min_window_height(self):
         min_height = self._get_min_height_for_date_display()
@@ -1365,7 +1559,9 @@ class ClockApp(tk.Tk):
 
     def _restore_window_size(self):
         width = max(self._min_width, self.settings["window_width"])
-        height = max(self._get_min_height_for_date_display(), self.settings["window_height"])
+        height = max(
+            self._get_min_height_for_date_display(), self.settings["window_height"]
+        )
         window_x = self.settings["window_x"]
         window_y = self.settings["window_y"]
 
@@ -1444,6 +1640,7 @@ class ClockApp(tk.Tk):
 
         self.update_idletasks()
         self._restore_window_geometry(geometry_before)
+        self._apply_window_options()
 
     def _set_clock_only_mode(self, enabled):
         self.settings["layout_preset"] = "custom"
@@ -1479,6 +1676,9 @@ class ClockApp(tk.Tk):
         y = event.y_root - self._drag_offset_y
         self.geometry(f"+{x}+{y}")
 
+        if self._click_layer is not None:
+            self._click_layer.geometry(f"+{x}+{y}")
+
     def _restore_normal_window(self, event=None):
         if self.settings["clock_only_mode"]:
             self._set_clock_only_mode(False)
@@ -1500,6 +1700,7 @@ class ClockApp(tk.Tk):
         self.high_quality_rendering_var.set(self.settings["high_quality_rendering"])
         self.led_glow_enabled_var.set(self.settings["led_glow_enabled"])
         self.close_to_tray_var.set(self.settings["close_to_tray"])
+        self.transparent_background_var.set(self.settings["transparent_background"])
 
     def _normalize_seconds_size(self, seconds_size):
         return "small" if seconds_size == "small" else "normal"
@@ -1511,7 +1712,9 @@ class ClockApp(tk.Tk):
         if type(opacity_percent) is not int:
             return 100
 
-        clamped_opacity = min(OPACITY_MAX_PERCENT, max(OPACITY_MIN_PERCENT, opacity_percent))
+        clamped_opacity = min(
+            OPACITY_MAX_PERCENT, max(OPACITY_MIN_PERCENT, opacity_percent)
+        )
         return round(clamped_opacity / OPACITY_STEP_PERCENT) * OPACITY_STEP_PERCENT
 
     def _normalize_date_display(self, date_display):
@@ -1591,20 +1794,12 @@ class ClockApp(tk.Tk):
             pystray.MenuItem("非表示", self._on_tray_hide),
             pystray.MenuItem("時計のみ表示切替", self._on_tray_toggle_clock_only),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("終了", self._on_tray_quit)
+            pystray.MenuItem("終了", self._on_tray_quit),
         )
 
-        self._tray_icon = pystray.Icon(
-            "SevenSegmentClock",
-            image,
-            APP_NAME,
-            menu
-        )
+        self._tray_icon = pystray.Icon("SevenSegmentClock", image, APP_NAME, menu)
 
-        self._tray_thread = threading.Thread(
-            target=self._tray_icon.run,
-            daemon=True
-        )
+        self._tray_thread = threading.Thread(target=self._tray_icon.run, daemon=True)
         self._tray_thread.start()
 
     def _set_window_icon(self):
@@ -1649,37 +1844,20 @@ class ClockApp(tk.Tk):
         child.geometry(f"+{x}+{y}")
         child.lift()
         child.focus_set()
-        # child.update_idletasks()
-        # parent_x = self.winfo_rootx()
-        # parent_y = self.winfo_rooty()
-        # parent_width = self.winfo_width()
-        # parent_height = self.winfo_height()
-        # child_width = child.winfo_width()
-        # child_height = child.winfo_height()
-
-        # x = parent_x + (parent_width - child_width) // 2
-        # y = parent_y + (parent_height - child_height) // 2
-        # child.geometry(f"+{max(x, 0)}+{max(y, 0)}")
-
-    # def _on_close(self):
-    #     if self._timer_after_id is not None:
-    #         self.after_cancel(self._timer_after_id)
-    #         self._timer_after_id = None
-
-    #     self._remember_window_size()
-    #     self._save_settings_with_notice()
-    #     self.destroy()
 
     def _on_close_to_tray_setting_changed(self):
         self.settings["close_to_tray"] = self.close_to_tray_var.get()
         self._save_settings_with_notice()
 
     def _on_close(self):
-        if self.settings["close_to_tray"] and TRAY_AVAILABLE and self._tray_icon is not None:
+        if (
+            self.settings["close_to_tray"]
+            and TRAY_AVAILABLE
+            and self._tray_icon is not None
+        ):
             self._hide_window()
             return
         self._quit_app()
-
 
     def _quit_app(self):
         """アプリを完全に終了する。"""
@@ -1695,4 +1873,5 @@ class ClockApp(tk.Tk):
         self._remember_window_size()
         self._save_settings_with_notice()
         self._stop_tray_icon()
+        self._destroy_click_layer()
         self.destroy()

@@ -41,6 +41,7 @@ DEFAULT_SETTINGS = {
         },
     },
     "opacity_percent": 100,
+    "transparent_background": False,
     "date_display": "off",
     "weekday_color_enabled": False,
     "high_quality_rendering": False,

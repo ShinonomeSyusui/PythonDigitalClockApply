@@ -51,6 +51,7 @@ class SevenSegmentClockView(tk.Canvas):
     LED_GLOW_ALPHA = 190
     LED_GLOW_WIDE_RADIUS_RATIO = 0.014
     LED_GLOW_TIGHT_RADIUS_RATIO = 0.004
+    HIDDEN_COLON = " "
 
     def __init__(self, master, segment_on, segment_off, background, **kwargs):
         super().__init__(
@@ -290,30 +291,64 @@ class SevenSegmentClockView(tk.Canvas):
             return self.time_text, ""
 
         return f"{parts[0]}:{parts[1]}", f":{parts[2]}"
-
+    
+    def _is_colon_separator(self, char):
+        return char == ":" or char == self.HIDDEN_COLON
+    
     def _text_unit_width(self, text):
-        visible_chars = [char for char in text if char in self.DIGIT_SEGMENTS or char == ":"]
+        visible_chars = [
+            char for char in text
+            if char in self.DIGIT_SEGMENTS or self._is_colon_separator(char)
+        ]
         unit_width = 0
 
         for char in visible_chars:
-            unit_width += self.COLON_WIDTH_UNIT if char == ":" else self.DIGIT_WIDTH_UNIT
+            unit_width += self.COLON_WIDTH_UNIT if self._is_colon_separator(char) else self.DIGIT_WIDTH_UNIT
 
         if len(visible_chars) > 1:
             unit_width += self.GAP_UNIT * (len(visible_chars) - 1)
 
         return unit_width
 
+    # def _text_unit_width(self, text):
+    #     visible_chars = [char for char in text if char in self.DIGIT_SEGMENTS or char == ":"]
+    #     unit_width = 0
+
+    #     for char in visible_chars:
+    #         unit_width += self.COLON_WIDTH_UNIT if char == ":" else self.DIGIT_WIDTH_UNIT
+
+    #     if len(visible_chars) > 1:
+    #         unit_width += self.GAP_UNIT * (len(visible_chars) - 1)
+
+    #     return unit_width
+
     def _measure_text_width(self, text, digit_width, colon_width, gap):
-        visible_chars = [char for char in text if char in self.DIGIT_SEGMENTS or char == ":"]
+        visible_chars = [
+            char for char in text
+            if char in self.DIGIT_SEGMENTS or self._is_colon_separator(char)
+        ]
         width = 0
 
         for char in visible_chars:
-            width += colon_width if char == ":" else digit_width
+            width += colon_width if self._is_colon_separator(char) else digit_width
 
         if len(visible_chars) > 1:
             width += gap * (len(visible_chars) - 1)
 
         return width
+
+
+    # def _measure_text_width(self, text, digit_width, colon_width, gap):
+    #     visible_chars = [char for char in text if char in self.DIGIT_SEGMENTS or char == ":"]
+    #     width = 0
+
+    #     for char in visible_chars:
+    #         width += colon_width if char == ":" else digit_width
+
+    #     if len(visible_chars) > 1:
+    #         width += gap * (len(visible_chars) - 1)
+
+    #     return width
 
     def _draw_time_text(self, layout):
         if layout["small_seconds"]:
@@ -353,14 +388,26 @@ class SevenSegmentClockView(tk.Canvas):
 
     def _draw_text(self, text, x, y, digit_width, digit_height, colon_width, gap, thickness):
         for char in text:
-            if char == ":":
-                self._draw_colon(x, y, colon_width, digit_height, thickness)
+            if self._is_colon_separator(char):
+                if char == ":":
+                    self._draw_colon(x, y, colon_width, digit_height, thickness)
                 x += colon_width + gap
             elif char in self.DIGIT_SEGMENTS:
                 self._draw_digit(char, x, y, digit_width, digit_height, thickness)
                 x += digit_width + gap
 
         return x - gap
+
+    # def _draw_text(self, text, x, y, digit_width, digit_height, colon_width, gap, thickness):
+    #     for char in text:
+    #         if char == ":":
+    #             self._draw_colon(x, y, colon_width, digit_height, thickness)
+    #             x += colon_width + gap
+    #         elif char in self.DIGIT_SEGMENTS:
+    #             self._draw_digit(char, x, y, digit_width, digit_height, thickness)
+    #             x += digit_width + gap
+
+    #     return x - gap
 
     def _draw_digit(self, digit, x, y, width, height, thickness):
         segment_states = self.DIGIT_SEGMENTS[digit]
@@ -676,14 +723,26 @@ class SevenSegmentClockView(tk.Canvas):
 
     def _draw_text_pillow(self, draw, text, x, y, digit_width, digit_height, colon_width, gap, thickness, render_scale, glow_only):
         for char in text:
-            if char == ":":
-                self._draw_colon_pillow(draw, x, y, colon_width, digit_height, thickness, render_scale, glow_only)
+            if self._is_colon_separator(char):
+                if char == ":":
+                    self._draw_colon_pillow(draw, x, y, colon_width, digit_height, thickness, render_scale, glow_only)
                 x += colon_width + gap
             elif char in self.DIGIT_SEGMENTS:
                 self._draw_digit_pillow(draw, char, x, y, digit_width, digit_height, thickness, render_scale, glow_only)
                 x += digit_width + gap
 
         return x - gap
+
+    # def _draw_text_pillow(self, draw, text, x, y, digit_width, digit_height, colon_width, gap, thickness, render_scale, glow_only):
+    #     for char in text:
+    #         if char == ":":
+    #             self._draw_colon_pillow(draw, x, y, colon_width, digit_height, thickness, render_scale, glow_only)
+    #             x += colon_width + gap
+    #         elif char in self.DIGIT_SEGMENTS:
+    #             self._draw_digit_pillow(draw, char, x, y, digit_width, digit_height, thickness, render_scale, glow_only)
+    #             x += digit_width + gap
+
+    #     return x - gap
 
     def _draw_digit_pillow(self, draw, digit, x, y, width, height, thickness, render_scale, glow_only):
         segment_states = self.DIGIT_SEGMENTS[digit]
@@ -860,3 +919,4 @@ class SevenSegmentClockView(tk.Canvas):
             center_x - half,
             bottom_y - thickness,
         )
+

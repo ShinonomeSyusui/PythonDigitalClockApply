@@ -248,6 +248,7 @@ class ClockApp(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         # self.bind("<Unmap>", self._on_window_unmap)
         self._setup_tray_icon()
+        self.after_idle(self._refresh_click_layer)
         self._update_clock()
 
     def _on_tray_quit(self, icon=None, item=None):
@@ -269,16 +270,14 @@ class ClockApp(tk.Tk):
             self.lift()
             self.focus_force()
             self._apply_window_options()
-            self._sync_click_layer_geometry()
+            self.after_idle(self._refresh_click_layer)
         except tk.TclError:
             pass
 
     def _hide_window(self):
         """ウィンドウを非表示にする。"""
-        if self._click_layer is not None:
-            self._click_layer.withdraw()
+        self._hide_click_layer()
         self.withdraw()
-        self._sync_click_layer_geometry()
 
     def _on_tray_toggle_clock_only(self, icon=None, item=None):
         """トレイメニューから時計のみ表示を切り替える。"""
@@ -1169,12 +1168,12 @@ class ClockApp(tk.Tk):
         self.date_display_var.set(self.settings["date_display"])
 
         self._apply_visual_settings()
-        self._apply_window_options()
         self._apply_min_window_height()
         self._apply_clock_only_mode()
         self._apply_render_settings()
+        self._apply_window_options()
         self._force_clock_redraw()
-        self._save_settings_with_notice()
+        self._save_settings_with_notice()   
 
     def _on_render_setting_changed(self):
         if not PIL_AVAILABLE:
@@ -1470,11 +1469,13 @@ class ClockApp(tk.Tk):
         except tk.TclError:
             pass
 
-        if self.settings.get("transparent_background", False) and self.settings.get("clock_only_mode", False):
-            self._ensure_click_layer()
-            self._sync_click_layer_geometry()
-        else:
-            self._destroy_click_layer()
+        self._refresh_click_layer()
+
+        # if self.settings.get("transparent_background", False) and self.settings.get("clock_only_mode", False):
+        #     self._ensure_click_layer()
+        #     self._sync_click_layer_geometry()
+        # else:
+        #     self._destroy_click_layer()
 
     def _ensure_click_layer(self):
         if self._click_layer is not None:
@@ -1504,24 +1505,45 @@ class ClockApp(tk.Tk):
         self._click_layer = layer
         self._sync_click_layer_geometry()
 
+    def _should_use_click_layer(self):
+        return (
+            self._is_transparent_background_supported()
+            and self.settings.get("transparent_background", False)
+        )
+    
+    def _refresh_click_layer(self):
+        if self._should_use_click_layer():
+            self._ensure_click_layer()
+            self.after_idle(self._sync_click_layer_geometry)
+        else:
+            self._destroy_click_layer()
+
     def _sync_click_layer_geometry(self):
         if self._click_layer is None:
             return
 
         try:
             self.update_idletasks()
-            width = max(1, self.winfo_width())
-            height = max(1, self.winfo_height())
-            x = self.winfo_x()
-            y = self.winfo_y()
+            self.clock_view.update_idletasks()
+
+            width = max(1, self.clock_view.winfo_width())
+            height = max(1, self.clock_view.winfo_height())
+            x = self.clock_view.winfo_rootx()
+            y = self.clock_view.winfo_rooty()
 
             self._click_layer.geometry(f"{width}x{height}+{x}+{y}")
 
-            if self.settings["transparent_background"] and self.settings["clock_only_mode"]:
+            if self._should_use_click_layer():
+                try:
+                    self._click_layer.attributes("-topmost", self.settings["always_on_top"])
+                except tk.TclError:
+                    pass
+
                 self._click_layer.deiconify()
                 self._click_layer.lift()
             else:
                 self._click_layer.withdraw()
+
         except tk.TclError:
             pass
 
@@ -1535,6 +1557,15 @@ class ClockApp(tk.Tk):
             pass
 
         self._click_layer = None
+
+    def _hide_click_layer(self):
+        if self._click_layer is None:
+            return
+
+        try:
+            self._click_layer.withdraw()
+        except tk.TclError:
+            pass
 
     def _apply_min_window_height(self):
         min_height = self._get_min_height_for_date_display()
@@ -1640,7 +1671,7 @@ class ClockApp(tk.Tk):
 
         self.update_idletasks()
         self._restore_window_geometry(geometry_before)
-        self._apply_window_options()
+        self.after_idle(self._refresh_click_layer)
 
     def _set_clock_only_mode(self, enabled):
         self.settings["layout_preset"] = "custom"
@@ -1651,6 +1682,7 @@ class ClockApp(tk.Tk):
         self._apply_render_settings()
         self._force_clock_redraw()
         self._save_settings_with_notice()
+        self.after_idle(self._refresh_click_layer)
 
     def _show_context_menu(self, event):
         if not self.settings["clock_only_mode"]:

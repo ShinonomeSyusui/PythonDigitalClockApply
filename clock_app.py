@@ -178,6 +178,7 @@ class ClockApp(tk.Tk):
         self._jst = timezone(timedelta(hours=9))
         self._last_display = None
         self._timer_after_id = None
+        self._colon_visible = True
         self._drag_offset_x = 0
         self._drag_offset_y = 0
         self._last_auto_theme_key = None
@@ -1240,7 +1241,14 @@ class ClockApp(tk.Tk):
             )
             self._last_display = display_key
 
-        self._timer_after_id = self.after(1000, self._update_clock)
+        if self.settings["show_seconds"]:
+            self._colon_visible = True
+            update_interval = 1000
+        else:
+            self._colon_visible = not self._colon_visible
+            update_interval = 500
+
+        self._timer_after_id = self.after(update_interval, self._update_clock)
 
     def _make_time_text(self, now):
         hour = now.hour
@@ -1260,7 +1268,13 @@ class ClockApp(tk.Tk):
         if self.settings["show_seconds"]:
             return f"{hour_text}:{now.minute:02d}:{now.second:02d}", period_text
 
-        return f"{hour_text}:{now.minute:02d}", period_text
+        colon = ":" if self._colon_visible else " "
+        return f"{hour_text}{colon}{now.minute:02d}", period_text
+        
+        # if self.settings["show_seconds"]:
+        #     return f"{hour_text}:{now.minute:02d}:{now.second:02d}", period_text
+
+        # return f"{hour_text}:{now.minute:02d}", period_text
 
     def _make_date_info(self, now):
         if self.settings["date_display"] == "off":

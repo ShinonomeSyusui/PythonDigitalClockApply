@@ -1336,12 +1336,26 @@ class ClockApp(tk.Tk):
 
         if self.settings["show_seconds"]:
             self._colon_visible = True
-            update_interval = 1000
         else:
             self._colon_visible = not self._colon_visible
-            update_interval = 500
 
+        update_interval = self._calculate_next_clock_delay_ms(now)
         self._timer_after_id = self.after(update_interval, self._update_clock)
+
+
+    def _calculate_next_clock_delay_ms(self, now):
+        """現在時刻から、次回の時計更新までの待ち時間をミリ秒で返す。"""
+        current_ms = now.microsecond // 1000
+
+        if self.settings["show_seconds"]:
+            delay_ms = 1000 - current_ms
+        else:
+            delay_ms = 500 - (current_ms % 500)
+
+        # 0msや極端に短い待ち時間でafterが暴れないように最低値を設ける。
+        return max(50, delay_ms)
+
+
 
     def _make_time_text(self, now):
         hour = now.hour

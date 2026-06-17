@@ -670,8 +670,8 @@ class ClockApp(tk.Tk):
         )
         self._apply_render_settings()
         self.clock_view.pack(fill=tk.BOTH, expand=True)
-        self.clock_view.bind("<Button-3>", self._show_context_menu)
-        self.clock_view.bind("<ButtonPress-1>", self._start_window_move)
+        self.clock_view.bind("<Button-3>", self._on_window_right_click)
+        self.clock_view.bind("<ButtonPress-1>", self._on_window_left_press)
         self.clock_view.bind("<B1-Motion>", self._move_window)
         self.bind("<Escape>", self._restore_normal_window)
         self.bind_all("<F11>", self._toggle_clock_only_shortcut)
@@ -679,6 +679,33 @@ class ClockApp(tk.Tk):
         self.bind_all("<KeyPress-T>", self._toggle_always_on_top_shortcut)
         self.bind_all("<KeyPress-s>", self._toggle_seconds_shortcut)
         self.bind_all("<KeyPress-S>", self._toggle_seconds_shortcut)
+        self.bind_all("<KeyPress-b>", self._toggle_transparent_background_shortcut)
+        self.bind_all("<KeyPress-B>", self._toggle_transparent_background_shortcut)
+        self.bind_all("<KeyPress-d>", self._toggle_date_display_shortcut)
+        self.bind_all("<KeyPress-D>", self._toggle_date_display_shortcut)
+
+    def _toggle_transparent_background_shortcut(self, event=None):
+        self.transparent_background_var.set(
+            not self.settings["transparent_background"]
+        )
+        self._on_display_setting_changed()
+        return "break"
+
+    def _toggle_date_display_shortcut(self, event=None):
+        current_date_display = self.settings["date_display"]
+
+        if current_date_display == "off":
+            next_date_display = self.settings.get("last_date_display", "month_day")
+            if next_date_display == "off":
+                next_date_display = "month_day"
+        else:
+            self.settings["last_date_display"] = current_date_display
+            next_date_display = "off"
+
+        self.date_display_var.set(next_date_display)
+        self._on_display_setting_changed()
+        return "break"
+
 
     def _open_color_settings(self):
         original_settings = self.settings.copy()
@@ -1083,9 +1110,11 @@ class ClockApp(tk.Tk):
                 "Tkinter製の7セグメント風デジタル時計です。\n\n"
                 f"設定ファイル:\n{settings_path}\n\n"
                 "ショートカット:\n"
-                "F11: 時計のみ表示切替\n"
-                "T: 最前面表示切替\n"
-                "S: 秒表示切替"
+                "F11: 時計のみ表示切替 ON/OFF\n"
+                "T: 最前面表示切替 ON/OFF\n"
+                "S: 秒表示切替 ON/OFF\n"
+                "B: 背景透明化切替 ON/OFF\n"
+                "D: 日付表示切替 ON/OFF（前回の表示形式で復帰）"
             ),
             parent=self,
         )
@@ -1156,6 +1185,13 @@ class ClockApp(tk.Tk):
         self.settings["opacity_percent"] = self._normalize_opacity_percent(
             self.opacity_percent_var.get()
         )
+        date_display = self._normalize_date_display(self.date_display_var.get())
+
+        if date_display != "off":
+            self.settings["last_date_display"] = date_display
+
+        self.settings["date_display"] = date_display
+
         self.settings["date_display"] = self._normalize_date_display(
             self.date_display_var.get()
         )
@@ -1491,6 +1527,28 @@ class ClockApp(tk.Tk):
         # else:
         #     self._destroy_click_layer()
 
+
+    def _activate_app_window(self):
+        """クリック判定レイヤー経由の操作でも、本体ウィンドウへフォーカスを戻す。"""
+        try:
+            self.deiconify()
+            self.lift()
+            self.focus_force()
+
+            if self._click_layer is not None:
+                self._click_layer.lift()
+        except tk.TclError:
+            pass
+
+
+    def _on_window_left_press(self, event):
+        self._activate_app_window()
+        return self._start_window_move(event)
+
+    def _on_window_right_click(self, event):
+        self._activate_app_window()
+        return self._show_context_menu(event)
+
     def _ensure_click_layer(self):
         if self._click_layer is not None:
             return
@@ -1512,8 +1570,8 @@ class ClockApp(tk.Tk):
 
         layer.configure(bg="black")
 
-        layer.bind("<Button-3>", self._show_context_menu)
-        layer.bind("<ButtonPress-1>", self._start_window_move)
+        layer.bind("<Button-3>", self._on_window_right_click)
+        layer.bind("<ButtonPress-1>", self._on_window_left_press)
         layer.bind("<B1-Motion>", self._move_window)
 
         self._click_layer = layer
@@ -1685,6 +1743,10 @@ class ClockApp(tk.Tk):
 
         self.update_idletasks()
         self._restore_window_geometry(geometry_before)
+
+        # F11切り替え後にWindows側のタスクバーアイコンがPython既定へ戻ることがあるため再適用する。
+        self.after_idle(self._set_window_icon)
+        self.after(100, self._set_window_icon)
         self.after_idle(self._refresh_click_layer)
 
     def _set_clock_only_mode(self, enabled):

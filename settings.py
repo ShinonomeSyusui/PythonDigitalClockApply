@@ -43,6 +43,7 @@ DEFAULT_SETTINGS = {
     "opacity_percent": 100,
     "transparent_background": False,
     "date_display": "off",
+    "last_date_display": "month_day",
     "weekday_color_enabled": False,
     "high_quality_rendering": False,
     "led_glow_enabled": False,
@@ -61,6 +62,7 @@ ALLOWED_VALUES = {
     "date_size": ("normal", "small"),
     "theme": ("custom", "orange", "blue", "green", "red"),
     "date_display": ("off", "month_day", "month_day_weekday", "year_month_day", "full"),
+    "last_date_display": ("month_day", "month_day_weekday", "year_month_day", "full"),
     "layout_preset": ("custom", "standard", "compact", "date", "clock_only"),
 }
 
